@@ -3,13 +3,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from utils.arguments import CFGS
 
 
-DEVICE = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
 class TNet(nn.Module):
-    def __init__(self, k=64):
+    def __init__(self, k=64, device=None):
         super(TNet, self).__init__()
         self.conv1 = torch.nn.Conv1d(k, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
@@ -25,6 +24,7 @@ class TNet(nn.Module):
         self.bn5 = nn.BatchNorm1d(256)
 
         self.k = k
+        self.device = device
 
     def forward(self, x):
         B, D, N = x.shape
@@ -39,7 +39,7 @@ class TNet(nn.Module):
         x = F.relu(self.bn5(self.fc2(x)))
         x = self.fc3(x)
 
-        I = torch.eye(self.k).float().to(DEVICE)
+        I = torch.eye(self.k).float().to(self.device)
         I = I.repeat(B, 1, 1)
         x = x.reshape(B, self.k, self.k)
         x = x + I
@@ -48,18 +48,21 @@ class TNet(nn.Module):
 
 
 class PointNet(nn.Module):
-    def __init__(self):
+    def __init__(self, init_k, local_feat=True, device=None):
         super(PointNet, self).__init__()
 
-        self.stn1 = TNet(k=3)
-        self.stn2 = TNet(k=64)
+        self.stn1 = TNet(k=init_k, device=device)
+        if CFGS.second_stn:
+            self.stn2 = TNet(k=64, device=device)
 
-        self.conv1 = torch.nn.Conv1d(3, 64, 1)
+        self.conv1 = torch.nn.Conv1d(init_k, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
         self.bn1 = nn.BatchNorm1d(64)
         self.bn2 = nn.BatchNorm1d(128)
         self.bn3 = nn.BatchNorm1d(1024)
+
+        self.local_feat = local_feat
         
 
     def forward(self, x): # B, N, D
@@ -85,4 +88,6 @@ class PointNet(nn.Module):
 
         global_feature = torch.max(x, 2, keepdim=True)[0].reshape(-1, 1024)
 
-        return local_feature, global_feature
+        if self.local_feat:
+            return local_feature, global_feature
+        return global_feature
