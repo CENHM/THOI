@@ -10,7 +10,6 @@ class Configs:
         self.REQUIRE_CONFGS = None
         self.cfgs = self.__INIT_CONFIGS()
         assert self.REQUIRE_CONFGS is not None
-        
         self.__PREPROCESS()
 
 
@@ -23,6 +22,13 @@ class Configs:
         parser.add_argument('-te', '--testing', 
                             default=False, action='store_true', 
                             help='When this arugument is provided, the running mode will be set to test')
+        # model setting
+        parser.add_argument('-fn', '--fps_npoint', 
+                            type=int, default=1024,
+                            help='N-point cloud sampled by farthest point sampling (FPS) algorithm [default: 1024]')
+        parser.add_argument('-ss', '--second_stn', 
+                            default=False, action='store_true',
+                            help='When this arugument is provided, PointNet adopt the second STN (Spatial Transform Network)')
         # training setting
         parser.add_argument('-cp', '--checkpoint_path', 
                             type=str, default='checkpoints/tmp/', 

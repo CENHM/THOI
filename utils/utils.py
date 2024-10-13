@@ -3,9 +3,12 @@ import numpy as np
 import torch
 import os
 import datetime
+from matplotlib.collections import PolyCollection
+import matplotlib.pyplot as plt
 
 from utils.arguments import CFGS
 
+# You can ignore the following code.
 
 class Initializer:
     def __init__(self):
@@ -88,3 +91,36 @@ def SAVE_CHECKPOINT(epoch, optimizer, model, path):
         'model_state_dict': model.state_dict()
     }
     torch.save(save_dict, os.path.join(path, f'checkpoint.tar'))
+
+
+# # Start your code.
+
+# def visualize_obj_file(path):
+
+#     # https://zhuanlan.zhihu.com/p/655737746
+
+
+#     V, F = [], []
+#     with open(path) as f:
+#         for line in f.readlines():
+#             if line.startswith('#'):
+#                 continue
+#             values = line.split()
+#             if not values:
+#                 continue
+#             if values[0] == 'v':
+#                 V.append([float(x) for x in values[1:4]])
+#             elif values[0] == 'f':
+#                 F.append([int(x.split('/')[0]) for x in values[1:4]])
+#     V, F = np.array(V), np.array(F)-1
+
+#     V = (V-(V.max(0)+V.min(0))/2)/max(V.max(0)-V.min(0))
+
+#     fig = plt.figure(figsize=(6,6))
+#     T = V[F][...,:2]
+#     ax = fig.add_axes([0,0,1,1], xlim=[-1,+1], ylim=[-1,+1],
+#                     aspect=1, frameon=False)
+#     collection = PolyCollection(T, closed=True, linewidth=0.1,
+#                                 facecolor="None", edgecolor="black")
+#     ax.add_collection(collection)
+#     plt.show()
