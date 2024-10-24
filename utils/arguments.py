@@ -23,12 +23,26 @@ class Configs:
                             default=False, action='store_true', 
                             help='When this arugument is provided, the running mode will be set to test')
         # model setting
-        parser.add_argument('-fn', '--fps_npoint', 
+
+        ## Contact map generation
+        parser.add_argument('--fps_npoint', 
                             type=int, default=1024,
                             help='N-point cloud sampled by farthest point sampling (FPS) algorithm [default: 1024]')
-        parser.add_argument('-ss', '--second_stn', 
+        parser.add_argument('--second_stn', 
                             default=False, action='store_true',
                             help='When this arugument is provided, PointNet adopt the second STN (Spatial Transform Network)')
+        
+        ## Hand-object motion generator
+        parser.add_argument('--beta_schedule', 
+                            type=str, 
+                            default='linear', 
+                            help='Beta scheduler of DDPM [default: linear]')
+        parser.add_argument('--timesteps', 
+                            type=int, 
+                            default=1000,
+                            help='DDPM timesteps [default: 1000]')
+        
+
         # training setting
         parser.add_argument('-cp', '--checkpoint_path', 
                             type=str, default='checkpoints/tmp/', 
@@ -50,7 +64,7 @@ class Configs:
                             help='Optimization L2 weight decay [default: 0]')
         # testing setting
         parser.add_argument('-rp', '--result_path', 
-                            type=str, default='resullt/tmp/', 
+                            type=str, default='result/tmp/', 
                             help='Outputs save path [default: resullt/tmp/]')
         
         return parser.parse_args()
