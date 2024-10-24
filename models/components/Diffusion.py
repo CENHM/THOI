@@ -2,8 +2,8 @@ import torch
 from torch.nn import functional as F
 import math
 
+from models.components.BackwardModel import BackwardModel
 from utils.arguments import CFGS
-
 
 
 class Diffusion:

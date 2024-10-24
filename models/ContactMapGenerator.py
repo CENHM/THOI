@@ -76,18 +76,18 @@ class ContactMapGeneration(nn.Module):
             contact_vec = torch.randn(B, 64)
 
 
-        object_scale = object_scale.reshape(B, 1, 1).repeat(1, CFGS.fps_npoint, 1)
-        global_feature = global_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
-        text_feature = text_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
-        contact_vec = contact_vec.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
+        object_scale_reshape = object_scale.reshape(B, 1, 1).repeat(1, CFGS.fps_npoint, 1)
+        global_feature_reshape = global_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
+        text_feature_reshape = text_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
+        contact_vec_reshape = contact_vec.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
 
-        concatenate_feature = torch.cat([global_feature, 
+        concatenate_feature = torch.cat([global_feature_reshape, 
                                          local_feature, 
-                                         text_feature, 
-                                         object_scale, 
-                                         contact_vec], dim=2)
+                                         text_feature_reshape, 
+                                         object_scale_reshape, 
+                                         contact_vec_reshape], dim=2)
         
         refine_contact_map = self.contact_decoder(concatenate_feature)
 
-        return refine_contact_map
+        return refine_contact_map, (global_feature, text_feature, text_feature)
         
