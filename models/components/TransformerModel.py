@@ -8,7 +8,7 @@ from utils.arguments import CFGS
 
 
 
-class BackwardModel(nn.Module):
+class TransformerModel(nn.Module):
     def __init__(self,
             text_feat_dim,
             objs_feat_dim,
@@ -16,7 +16,7 @@ class BackwardModel(nn.Module):
             objs_dim,
             dim=512,
         ):
-        super(BackwardModel, self).__init__()
+        super(TransformerModel, self).__init__()
 
         self.dim = dim
 
@@ -31,12 +31,19 @@ class BackwardModel(nn.Module):
         self.lhand_emb = nn.Linear(hand_dim, dim)
         self.rhand_emb = nn.Linear(hand_dim, dim)
         self.obj_emb = nn.Linear(objs_dim, dim)
+
+        self.lhand_out_emb = nn.Linear(dim, hand_dim)
+        self.rhand_out_emb = nn.Linear(dim, hand_dim)
+        self.obj_out_emb = nn.Linear(dim, objs_dim)
     
     def forward(self, 
         x_lhand, x_rhand, x_obj, 
         objs_feat, timesteps, text_feat):
 
         B = x_lhand.shape[0]
+
+        objs_feat = objs_feat.unsqueeze(dim=1)
+        text_feat = text_feat.unsqueeze(dim=1)
 
         emb = self.timestep_emb(timesteps)
         emb += self.objs_feat_emb(objs_feat)
@@ -47,15 +54,15 @@ class BackwardModel(nn.Module):
         f_obj = self.obj_emb(x_obj)
 
         x = torch.stack((f_lhand, f_rhand, f_obj), dim=1)
-        x = x.reshape(-1, B, self.dim)
+        x = x.reshape(B, -1, self.dim)
 
-        x = torch.cat((emb, x), dim=0)
+        x = torch.cat((emb, x), dim=1)
         x = self.frame_wise_pos_encoder(x)
         x = self.agent_wise_pos_encoder(x)
 
-        x_out_lhand = x[0::3]
-        x_out_rhand = x[1::3]
-        x_out_obj = x[2::3]
+        x_out_lhand = self.lhand_out_emb(x[:, 1::3])
+        x_out_rhand = self.rhand_out_emb(x[:, 2::3])
+        x_out_obj = self.obj_out_emb(x[:, 3::3])
 
         return x_out_lhand, x_out_rhand, x_out_obj
 
@@ -85,14 +92,14 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         if self.encode_mode == "frame-wise":
-            x[0] = x[0] + self.pe[0]
-            x[1::3] = x[1::3] + self.pe[1:(x.shape[0] + 2)//3]
-            x[2::3] = x[2::3] + self.pe[1:(x.shape[0] + 2)//3]
-            x[3::3] = x[3::3] + self.pe[1:(x.shape[0] + 2)//3]
+            x[:, 0] = x[:, 0] + self.pe[0]
+            x[:, 1::3] = x[:, 1::3] + self.pe[1:1+(x.shape[0] + 2)//3, 0, :]
+            x[:, 2::3] = x[:, 2::3] + self.pe[1:1+(x.shape[0] + 2)//3, 0, :]
+            x[:, 3::3] = x[:, 3::3] + self.pe[1:1+(x.shape[0] + 2)//3, 0, :]
         elif self.encode_mode == "agent-wise":
-            x[1::3] = x[1::3] + self.pe[1:2]
-            x[2::3] = x[2::3] + self.pe[len(self.pe)//3 : len(self.pe)//3+1]
-            x[3::3] = x[3::3] + self.pe[len(self.pe)*2//3 : len(self.pe)*2//3+1]
+            x[:, 1::3] = x[:, 1::3] + self.pe[1:2, 0, :]
+            x[:, 2::3] = x[:, 2::3] + self.pe[len(self.pe)//3 : len(self.pe)//3+1, 0, :]
+            x[:, 3::3] = x[:, 3::3] + self.pe[len(self.pe)*2//3 : len(self.pe)*2//3+1, 0, :]
         elif self.encode_mode == "default":
             x = x + self.pe[:x.shape[0], :]
         else:
@@ -117,7 +124,7 @@ class TimestepEmbedding(nn.Module):
         )
 
     def forward(self, timesteps):
-        return self.time_embed(self.pos_encoder.pe[timesteps]).permute(1, 0, 2)
+        return self.time_embed(self.pos_encoder.pe[timesteps])
     
 
 class TransformerEncoder(nn.Module):

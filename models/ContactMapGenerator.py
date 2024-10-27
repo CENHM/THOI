@@ -1,11 +1,10 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import torch.nn.functional as F
 
 from models.components.Clip import Clip
 from models.components.PointNet import PointNet
-from models.components.ContactEncoder import ContactEncoder
-from models.components.ContactDecoder import ContactDecoder
 
 from utils.arguments import CFGS
 
@@ -75,6 +74,10 @@ class ContactMapGeneration(nn.Module):
         else:
             contact_vec = torch.randn(B, 64)
 
+        object_scale = object_scale.float()
+        global_feature = global_feature.float()
+        text_feature = text_feature.float()
+        contact_vec = contact_vec.float()
 
         object_scale_reshape = object_scale.reshape(B, 1, 1).repeat(1, CFGS.fps_npoint, 1)
         global_feature_reshape = global_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
@@ -89,5 +92,53 @@ class ContactMapGeneration(nn.Module):
         
         refine_contact_map = self.contact_decoder(concatenate_feature)
 
-        return refine_contact_map, (global_feature, text_feature, text_feature)
+        return refine_contact_map, (global_feature, object_scale, text_feature)
+    
+
+class ContactEncoder(nn.Module):
+    def __init__(self, device=None):
+        super(ContactEncoder, self).__init__()
+
+        self.pointnet_structure = PointNet(init_k=4, local_feat=False, device=device)
+
+        self.fc1 = torch.nn.Linear(1024, 512)
+        self.fc2 = torch.nn.Linear(512, 256)
+        self.fc3 = torch.nn.Linear(256, 128)
+        self.bn1 = nn.BatchNorm1d(512)
+        self.bn2 = nn.BatchNorm1d(256)
+        self.bn3 = nn.BatchNorm1d(128)
         
+    def __reparameterize(self, mu, logvar):
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return mu + eps * std
+
+    def forward(self, x): # B, N, D
+        x = self.pointnet_structure(x)
+
+        x = F.relu(self.bn1(self.fc1(x)))
+        x = F.relu(self.bn2(self.fc2(x)))
+        x = self.fc3(x)
+
+        mean, var = torch.chunk(x, 2, dim=1)
+        x = self.__reparameterize(mean, var)
+
+        return x
+        
+
+class ContactDecoder(nn.Module):
+    def __init__(self):
+        super(ContactDecoder, self).__init__()
+
+        self.fc1 = torch.nn.Linear(1665, 512)
+        self.fc2 = torch.nn.Linear(512, 256)
+        self.fc3 = torch.nn.Linear(256, 128)
+        self.fc4 = torch.nn.Linear(128, 1)
+
+    def forward(self, x): # B, N, D
+        x = F.leaky_relu(self.fc1(x), negative_slope=0.2)
+        x = F.leaky_relu(self.fc2(x), negative_slope=0.2)
+        x = F.leaky_relu(self.fc3(x), negative_slope=0.2)
+        x = self.fc4(x)
+
+        return x

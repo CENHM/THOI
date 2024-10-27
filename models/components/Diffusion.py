@@ -1,173 +1,172 @@
 import torch
+import torch.nn as nn
 from torch.nn import functional as F
 import math
+import tqdm
 
-from models.components.BackwardModel import BackwardModel
-from utils.arguments import CFGS
+    
 
+class DiffusionModel(nn.Module):
+    # https://zhuanlan.zhihu.com/p/617895786
+    def __init__(self,
+                 denoise_model,
+                 schedule_name="linear_beta_schedule",
+                 timesteps=1000,
+                 beta_start=0.0001,
+                 beta_end=0.02):
+        super(DiffusionModel, self).__init__()
 
-class Diffusion:
-    def __init__(
-            self,
-            timesteps=CFGS.timesteps
-        ):
-
+        self.denoise_model = denoise_model
         self.timesteps = timesteps
+
+        beta_schedule_dict = {'linear_beta_schedule': self.__linear_beta_schedule,
+                              'cosine_beta_schedule': self.__cosine_beta_schedule}
+
+        if schedule_name in beta_schedule_dict:
+            self.variance_schedule_func = beta_schedule_dict[schedule_name]
+        else:
+            raise ValueError('Function not found in dictionary')
+
         
-        self.beta = self.__beta_scheduler()
-
-        # \alpha_t = 1 - \beta_t
-        # \hat{\alpha_t} = \prod^{t}_{i=1} \alpha_i    
-        self.alpha = 1. - self.beta
-        self.alpha_hat = torch.cumprod(self.alpha, axis=0)
-
-        self.sqrt_alpha_hat = torch.sqrt(self.alpha_hat)
-        self.sqrt_weighted_alpha_hat = torch.sqrt(1.0 - self.alpha_hat)
+        self.params = []
+        # parameters for lhand, rhand and obj
+        for i in range(3):
+            self.params.append(self.__generate_params())
 
 
-
-
-
-
-
-
-        self.alphas_cumprod = torch.cumprod(self.alphas, axis=0)
-        self.alphas_cumprod_prev = F.pad(self.alphas_cumprod[:-1], (1, 0), value=1.)
-        
+    def __generate_params(self):
+        betas = self.variance_schedule_func(self.timesteps)
+        # define alphas
+        alphas = 1. - betas
+        # \bar{alpha_t} = \prod^{t}_{i=1} alpha_i
+        alphas_cumprod = torch.cumprod(alphas, dim=0)
+        alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.0)
+        sqrt_recip_alphas = torch.sqrt(1.0 / alphas)
         # calculations for diffusion q(x_t | x_{t-1}) and others
-        self.sqrt_alphas_cumprod = torch.sqrt(self.alphas_cumprod)
-        self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - self.alphas_cumprod)
-        self.log_one_minus_alphas_cumprod = torch.log(1.0 - self.alphas_cumprod)
-        self.sqrt_recip_alphas_cumprod = torch.sqrt(1.0 / self.alphas_cumprod)
-        self.sqrt_recipm1_alphas_cumprod = torch.sqrt(1.0 / self.alphas_cumprod - 1)
-        
+        # x_t  = sqrt(alphas_cumprod)*x_0 + sqrt(1 - alphas_cumprod)*z_t
+        sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
+        sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)
         # calculations for posterior q(x_{t-1} | x_t, x_0)
-        self.posterior_variance = (
-            self.betas * (1.0 - self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
-        )
-        # below: log calculation clipped because the posterior variance is 0 at the beginning
-        # of the diffusion chain
-        self.posterior_log_variance_clipped = torch.log(self.posterior_variance.clamp(min =1e-20))
-        
-        self.posterior_mean_coef1 = (
-            self.betas * torch.sqrt(self.alphas_cumprod_prev) / (1.0 - self.alphas_cumprod)
-        )
-        self.posterior_mean_coef2 = (
-            (1.0 - self.alphas_cumprod_prev)
-            * torch.sqrt(self.alphas)
-            / (1.0 - self.alphas_cumprod)
-        )
+        # 这里用的不是简化后的方差而是算出来的
+        posterior_variance = betas * (1. - alphas_cumprod_prev) / (1. - alphas_cumprod)
 
-    def __linear_beta_scheduler(self, beta_s=1e-4, beta_e=0.02):
-        return torch.linspace(beta_s, beta_e, self.timesteps, dtype=torch.float64)
 
-    def __cosine_beta_scheduler(self, max_beta=0.999):
-        cos_cal = lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,
+        param_dict = {
+            "betas": betas, 
+            "alphas": alphas, 
+            "alphas_cumprod": alphas_cumprod, 
+            "alphas_cumprod_prev": alphas_cumprod_prev, 
+            "sqrt_recip_alphas": sqrt_recip_alphas,
+            "sqrt_alphas_cumprod": sqrt_alphas_cumprod, 
+            "sqrt_one_minus_alphas_cumprod": sqrt_one_minus_alphas_cumprod, 
+            "posterior_variance": posterior_variance
+        }
 
-        t = torch.arange(self.timesteps) / self.timesteps
-        t1, t2 = t[:-1], t[1:]
-        cos_t1, cos_t2 = cos_cal(t1), cos_cal(t2)
-        betas = 1 - cos_t2 / cos_t1
-        
-        return torch.clamp(betas, max=max_beta)
+        return param_dict
 
-    def __beta_scheduler(self):
-        if CFGS.beta_schedule == "linear":
-            return self.__linear_beta_scheduler()
-        elif CFGS.beta_schedule == "cosine":
-            return self.__cosine_beta_scheduler()
-        raise ValueError(f"unknown beta schedule of: {CFGS.beta_schedule}")
 
-    # get the param of given timestep t
-    def _extract(self, a, t, x_shape):
+    def __cosine_beta_schedule(self, timesteps, s=0.008):
+        steps = timesteps + 1
+        x = torch.linspace(0, timesteps, steps)
+        alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
+        alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
+        betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
+        return torch.clip(betas, 0.0001, 0.9999)
+
+
+    def __linear_beta_schedule(self, timesteps, beta_start=0.0001, beta_end=0.02):
+        return torch.linspace(beta_start, beta_end, timesteps)
+
+    
+    def __extract(self, a, t, x_shape):    
         B = t.shape[0]
         out = a.to(t.device).gather(0, t).float()
         out = out.reshape(B, *((1,) * (len(x_shape) - 1)))
         return out
-    
-    # forward diffusion (using the nice property): q(x_t | x_0)
-    def q_sample(self, x, t, noise=None):
-        if noise is None:
-            noise = torch.randn_like(x)
 
-        sqrt_alpha_hat_t = self._extract(self.sqrt_alpha_hat, t, x.shape)
-        sqrt_weighted_alpha_hat_t = self._extract(self.sqrt_weighted_alpha_hat, t, x.shape)
 
-        return sqrt_alpha_hat_t * x + sqrt_weighted_alpha_hat_t * noise
-    
-    # Get the mean and variance of q(x_t | x_0).
-    def q_mean_variance(self, x_start, t):
-        mean = self._extract(self.sqrt_alphas_cumprod, t, x_start.shape) * x_start
-        variance = self._extract(1.0 - self.alphas_cumprod, t, x_start.shape)
-        log_variance = self._extract(self.log_one_minus_alphas_cumprod, t, x_start.shape)
-        return mean, variance, log_variance
-    
-    # Compute the mean and variance of the diffusion posterior: q(x_{t-1} | x_t, x_0)
-    def q_posterior_mean_variance(self, x_start, x_t, t):
-        posterior_mean = (
-            self._extract(self.posterior_mean_coef1, t, x_t.shape) * x_start
-            + self._extract(self.posterior_mean_coef2, t, x_t.shape) * x_t
-        )
-        posterior_variance = self._extract(self.posterior_variance, t, x_t.shape)
-        posterior_log_variance_clipped = self._extract(self.posterior_log_variance_clipped, t, x_t.shape)
-        return posterior_mean, posterior_variance, posterior_log_variance_clipped
-    
-    # compute x_0 from x_t and pred noise: the reverse of `q_sample`
-    def predict_start_from_noise(self, x_t, t, noise):
-        return (
-            self._extract(self.sqrt_recip_alphas_cumprod, t, x_t.shape) * x_t -
-            self._extract(self.sqrt_recipm1_alphas_cumprod, t, x_t.shape) * noise
-        )
-    
-    # compute predicted mean and variance of p(x_{t-1} | x_t)
-    def p_mean_variance(self, model, x_t, t, clip_denoised=True):
-        # predict noise using model
-        pred_noise = model(x_t, t)
-        # get the predicted x_0: different from the algorithm2 in the paper
-        x_recon = self.predict_start_from_noise(x_t, t, pred_noise)
-        if clip_denoised:
-            x_recon = torch.clamp(x_recon, min=-1., max=1.)
-        model_mean, posterior_variance, posterior_log_variance = \
-                    self.q_posterior_mean_variance(x_recon, x_t, t)
-        return model_mean, posterior_variance, posterior_log_variance
+    def q_sample(self, 
+                 x_lhand, x_rhand, x_obj, 
+                 noise_t,
+                 lhand_noise, rhand_noise, obj_noise):
+        # forward diffusion (using the nice property)
+        # x_t  = sqrt(alphas_cumprod)*x_0 + sqrt(1 - alphas_cumprod)*z_t
+        lhand_lterm = self.__extract(self.params[0]["sqrt_alphas_cumprod"], noise_t, x_lhand.shape)
+        lhand_rterm = self.__extract(self.params[0]["sqrt_one_minus_alphas_cumprod"], noise_t, x_lhand.shape)
+        lhand_noise = lhand_lterm * x_lhand + lhand_rterm * lhand_noise
+
+        rhand_lterm = self.__extract(self.params[1]["sqrt_alphas_cumprod"], noise_t, x_rhand.shape)
+        rhand_rterm = self.__extract(self.params[1]["sqrt_one_minus_alphas_cumprod"], noise_t, x_rhand.shape)
+        rhand_noise = rhand_lterm * x_rhand + rhand_rterm * rhand_noise
+
+        obj_lterm = self.__extract(self.params[2]["sqrt_alphas_cumprod"], noise_t, x_obj.shape)
+        obj_rterm = self.__extract(self.params[2]["sqrt_one_minus_alphas_cumprod"], noise_t, x_obj.shape)
+        obj_noise = obj_lterm * x_obj + obj_rterm * obj_noise
+
+        return lhand_noise, rhand_noise, obj_noise
+
+
+    def compute_noise(self, 
+                     x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat):
+        # Generate noise for x_lhand, x_rhand and x_obj
+        lhand_noise = torch.randn_like(x_lhand)
+        rhand_noise = torch.randn_like(x_rhand)
+        obj_noise = torch.randn_like(x_obj)
+
+        x_lhand_noisy, x_rhand_noisy, x_obj_noisy = self.q_sample(x_lhand, x_rhand, x_obj, 
+                                                                  timesteps,
+                                                                  lhand_noise, rhand_noise, obj_noise)
+        lhand_pred_noise, rhand_pred_noise, obj_pred_noise = self.denoise_model(
+                                                                  x_lhand_noisy, x_rhand_noisy, x_obj_noisy,
+                                                                  objs_feat, timesteps, text_feat)
         
-    # denoise_step: sample x_{t-1} from x_t and pred_noise
+        return (lhand_pred_noise, rhand_pred_noise, obj_pred_noise), \
+               (lhand_noise, rhand_noise, obj_noise)
+
     @torch.no_grad()
-    def p_sample(self, model, x_t, t, clip_denoised=True):
-        # predict mean and variance
-        model_mean, _, model_log_variance = self.p_mean_variance(model, x_t, t,
-                                                    clip_denoised=clip_denoised)
-        noise = torch.randn_like(x_t)
-        # no noise when t == 0
-        nonzero_mask = ((t != 0).float().view(-1, *([1] * (len(x_t.shape) - 1))))
-        # compute x_{t-1}
-        pred_img = model_mean + nonzero_mask * (0.5 * model_log_variance).exp() * noise
-        return pred_img
-    
-    # denoise: reverse diffusion
+    def p_sample(self, x, t, t_index):
+        betas_t = self.__extract(self.betas, t, x.shape)
+        sqrt_one_minus_alphas_cumprod_t = self.__extract(
+            self.sqrt_one_minus_alphas_cumprod, t, x.shape
+        )
+        sqrt_recip_alphas_t = self.__extract(self.sqrt_recip_alphas, t, x.shape)
+
+        # Equation 11 in the paper
+        # Use our model (noise predictor) to predict the mean
+        model_mean = sqrt_recip_alphas_t * (
+                x - betas_t * self.denoise_model(x, t) / sqrt_one_minus_alphas_cumprod_t
+        )
+
+        if t_index == 0:
+            return model_mean
+        else:
+            posterior_variance_t = self.__extract(self.posterior_variance, t, x.shape)
+            noise = torch.randn_like(x)
+            # Algorithm 2 line 4:
+            return model_mean + torch.sqrt(posterior_variance_t) * noise
+
     @torch.no_grad()
-    def p_sample_loop(self, model, shape):
-        batch_size = shape[0]
-        device = next(model.parameters()).device
+    def p_sample_loop(self, shape):
+        device = next(self.denoise_model.parameters()).device
+
+        b = shape[0]
         # start from pure noise (for each example in the batch)
         img = torch.randn(shape, device=device)
         imgs = []
-        for i in tqdm(reversed(range(0, timesteps)), desc='sampling loop time step', total=timesteps):
-            img = self.p_sample(model, img, torch.full((batch_size,), i, device=device, dtype=torch.long))
+
+        for i in tqdm(reversed(range(0, self.timesteps)), desc='sampling loop time step', total=self.timesteps):
+            img = self.p_sample(img, torch.full((b,), i, device=device, dtype=torch.long), i)
             imgs.append(img.cpu().numpy())
         return imgs
-    
-    # sample new images
+
     @torch.no_grad()
-    def sample(self, model, image_size, batch_size=8, channels=3):
-        return self.p_sample_loop(model, shape=(batch_size, channels, image_size, image_size))
-    
-    # compute train losses
-    def train_losses(self, model, x, t):
-        # generate random noise
-        noise = torch.randn_like(x)
-        # get x_t
-        x_noisy = self.q_sample(x, t, noise=noise)
-        predicted_noise = model(x_noisy, t)
-        loss = F.mse_loss(noise, predicted_noise)
-        return loss
+    def sample(self, image_size, batch_size=16, channels=3):
+        return self.p_sample_loop(shape=(batch_size, channels, image_size, image_size))
+
+    def forward(self, 
+                x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat, 
+                training):
+        if training:
+            return self.compute_noise(x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat)
+        else:
+            return self.sample()
