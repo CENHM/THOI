@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
-from utils.utils import visualize_obj_file
+from utils.code_utils import visualize_obj_file
 
 class Object:
     def __init__(self, path='E:/Datasets/H2O/object/book/book.obj'):

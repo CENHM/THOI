@@ -19,10 +19,29 @@ class Configs:
         self.REQUIRE_CONFGS = ['epoch', 'batch_size', 'learning_rate', 'weight_decay']
 
         # global setting
-        parser.add_argument('-te', '--testing', 
-                            default=False, action='store_true', 
-                            help='When this arugument is provided, the running mode will be set to test')
+        parser.add_argument('-te', '--inferencing', 
+                            default=False, 
+                            action='store_true', 
+                            help='When this arugument is provided, the running mode will be set to inference mode')
+        
+        parser.add_argument('--dataset', 
+                            type=str, 
+                            default='h2o', 
+                            help='Selected dataset [default: h2o]')
         # model setting
+
+        parser.add_argument('--n_head', 
+                            type=int, 
+                            default=4,
+                            help='N-head self-attention in Transformer Encoder [default: 4]')
+        parser.add_argument('--n_layers', 
+                            type=int, 
+                            default=8,
+                            help='N-layers Transformer Encoder [default: 8]')
+        parser.add_argument('--max_length', 
+                            type=int, 
+                            default=150,
+                            help='Maximum motion frame length [default: 150]')
 
         ## Contact map generation
         parser.add_argument('--fps_npoint', 
@@ -41,6 +60,10 @@ class Configs:
                             type=int, 
                             default=1000,
                             help='DDPM timesteps [default: 1000]')
+        parser.add_argument('--max_frame', 
+                            type=int, 
+                            default=150,
+                            help='Maximum motion length [default: 150]')
         
 
         # training setting
@@ -70,7 +93,7 @@ class Configs:
         return parser.parse_args()
     
     def __PREPROCESS(self):
-        if self.cfgs.resume or self.cfgs.testing:
+        if self.cfgs.resume or self.cfgs.inferencing:
             self.__LOAD_CHECKPOINT_CONFIGS()
         else:
             self.__CLEAR_CHECKPOINT_PATH_FILE()

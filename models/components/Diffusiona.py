@@ -4,11 +4,13 @@ from torch.nn import functional as F
 import math
 import tqdm
 
-    
+from utils.arguments import CFGS
 
 class DiffusionModel(nn.Module):
     # https://zhuanlan.zhihu.com/p/617895786
     def __init__(self,
+                 cfgs,
+                 device,
                  denoise_model,
                  schedule_name="linear_beta_schedule",
                  timesteps=1000,
@@ -16,6 +18,7 @@ class DiffusionModel(nn.Module):
                  beta_end=0.02):
         super(DiffusionModel, self).__init__()
 
+        self.device = device
         self.denoise_model = denoise_model
         self.timesteps = timesteps
 
@@ -106,7 +109,7 @@ class DiffusionModel(nn.Module):
         return lhand_noise, rhand_noise, obj_noise
 
 
-    def compute_noise(self, 
+    def compute(self, 
                      x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat):
         # Generate noise for x_lhand, x_rhand and x_obj
         lhand_noise = torch.randn_like(x_lhand)
@@ -116,11 +119,10 @@ class DiffusionModel(nn.Module):
         x_lhand_noisy, x_rhand_noisy, x_obj_noisy = self.q_sample(x_lhand, x_rhand, x_obj, 
                                                                   timesteps,
                                                                   lhand_noise, rhand_noise, obj_noise)
-        lhand_pred_noise, rhand_pred_noise, obj_pred_noise = self.denoise_model(
-                                                                  x_lhand_noisy, x_rhand_noisy, x_obj_noisy,
-                                                                  objs_feat, timesteps, text_feat)
+        lhand_pred, rhand_pred, obj_pred = self.denoise_model(x_lhand_noisy, x_rhand_noisy, x_obj_noisy,
+                                                              objs_feat, timesteps, text_feat)
         
-        return (lhand_pred_noise, rhand_pred_noise, obj_pred_noise), \
+        return (lhand_pred, rhand_pred, obj_pred), \
                (lhand_noise, rhand_noise, obj_noise)
 
     @torch.no_grad()
@@ -160,13 +162,23 @@ class DiffusionModel(nn.Module):
         return imgs
 
     @torch.no_grad()
-    def sample(self, image_size, batch_size=16, channels=3):
+    def sample(self, objs_feat, text_feat, hand_motion_dim, obj_motion_dim):
+
+        B = objs_feat.shape[0]
+
+        lhand_motion = torch.randn(
+            [B, self.cfgs.max_frame, hand_motion_dim]).to(self.device)
+        rhand_motion = torch.randn(
+            [B, self.cfgs.max_frame, hand_motion_dim]).to(self.device)
+        obj_motion = torch.randn(
+            [B, self.cfgs.max_frame, obj_motion_dim]).to(self.device)
+
         return self.p_sample_loop(shape=(batch_size, channels, image_size, image_size))
 
     def forward(self, 
                 x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat, 
                 training):
         if training:
-            return self.compute_noise(x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat)
+            return self.compute(x_lhand, x_rhand, x_obj, objs_feat, timesteps, text_feat)
         else:
-            return self.sample()
+            return self.sample(objs_feat, text_feat)

@@ -4,8 +4,8 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 
 from utils.arguments import CFGS
-from utils.utils import INITIALIZER, log, save_log
-from utils.utils import LOAD_WEIGHT, SAVE_CHECKPOINT, LOAD_CHECKPOINT
+from utils.code_utils import INITIALIZER, log, save_log
+from utils.code_utils import LOAD_WEIGHT, SAVE_CHECKPOINT, LOAD_CHECKPOINT
 from utils.dataset import Dataset
 
 from models.net import Net

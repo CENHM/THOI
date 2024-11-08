@@ -10,19 +10,23 @@ from utils.arguments import CFGS
 
 class PositionalEncoding(nn.Module):
     def __init__(self, 
-        d_model, 
-        dropout=0.1, 
-        max_len=5000,
-        encode_mode="default"
-    ):
+            d_model,
+            comp,
+            dropout=0.1, 
+            max_frame_len=CFGS.max_length,
+            encode_mode="default"
+        ):
         super(PositionalEncoding, self).__init__()
 
+        assert comp == "homg" or comp == "hrn"
+        self.n_comp = 3 if comp == "homg" else 2
         self.encode_mode = encode_mode
-
-        pe = torch.zeros(max_len, d_model)
+        max_len = self.n_comp * max_frame_len
 
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
         div_term = torch.exp(torch.arange(0, d_model, 2).float() * (-np.log(10000.0) / d_model))
+        
+        pe = torch.zeros(max_len, d_model)
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0).transpose(0, 1)
@@ -32,16 +36,20 @@ class PositionalEncoding(nn.Module):
 
     def forward(self, x):
         if self.encode_mode == "frame-wise":
-            x[:, 0] = x[:, 0] + self.pe[0]
-            x[:, 1::3] = x[:, 1::3] + self.pe[1:1+(x.shape[0] + 2)//3, 0, :]
-            x[:, 2::3] = x[:, 2::3] + self.pe[1:1+(x.shape[0] + 2)//3, 0, :]
-            x[:, 3::3] = x[:, 3::3] + self.pe[1:1+(x.shape[0] + 2)//3, 0, :]
+            if self.n_comp == 3:
+                x[:, 0] += self.pe[0]
+                x[:, 1::3] += self.pe[1]
+                x[:, 2::3] += self.pe[2]
+                x[:, 3::3] += self.pe[3]
+            else: # self.n_comp == 2
+                x[:, 0::2] += self.pe[0]
+                x[:, 1::2] += self.pe[1]
         elif self.encode_mode == "agent-wise":
-            x[:, 1::3] = x[:, 1::3] + self.pe[1:2, 0, :]
-            x[:, 2::3] = x[:, 2::3] + self.pe[len(self.pe)//3 : len(self.pe)//3+1, 0, :]
-            x[:, 3::3] = x[:, 3::3] + self.pe[len(self.pe)*2//3 : len(self.pe)*2//3+1, 0, :]
+            start = 1 if self.n_comp == 3 else 0
+            for i in range(start, x.shape[1], self.n_comp):
+                x[:, i:i+self.n_comp] += self.pe[i // self.n_comp]
         elif self.encode_mode == "default":
-            x = x + self.pe[:x.shape[0], :]
+            x += self.pe[:x.shape[1]]
         else:
             raise ValueError(f"unknown position encoding mode of: {self.encode_mode}")
         return self.dropout(x)
@@ -50,10 +58,10 @@ class PositionalEncoding(nn.Module):
 
 class TimestepEmbedding(nn.Module):
     def __init__(self, 
-        pos_encoder,
-        hidden_dim, 
-        output_dim,
-    ):
+            pos_encoder,
+            hidden_dim, 
+            output_dim,
+        ):
         super().__init__()
         self.pos_encoder = pos_encoder
 
@@ -69,17 +77,17 @@ class TimestepEmbedding(nn.Module):
 
 class TransformerEncoder(nn.Module):
     def __init__(self,
-        d_model,
-        n_head,
-        num_layers,
-        activation="gelu",
-    ):
+            d_model,
+            n_head=CFGS.n_head,
+            n_layers=CFGS.n_layers,
+            activation="gelu",
+        ):
         super(TransformerEncoder, self).__init__()
         self.encoder_layer = nn.TransformerEncoderLayer(d_model=d_model, 
                                                         nhead=n_head, 
                                                         dim_feedforward=d_model*2,
                                                         activation=activation)
-        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=num_layers)
+        self.encoder = nn.TransformerEncoder(self.encoder_layer, num_layers=n_layers)
 
     def forward(self, x):
         x = self.encoder(x)
