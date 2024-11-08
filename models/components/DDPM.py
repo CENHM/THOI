@@ -29,10 +29,9 @@ class DDPM(nn.Module):
             self, 
             device,
             denoise_model,
-            T,
+            cfgs,
             beta_1=1e-4, 
             beta_T=0.02, 
-            schedule_name="cosine", 
         ):
         super().__init__()
 
@@ -40,10 +39,12 @@ class DDPM(nn.Module):
         self.denoise_model = denoise_model
         self.device = device
 
-        self.schedule_name = schedule_name
         self.beta_1 = beta_1
         self.beta_T = beta_T
-        self.T = T
+
+        self.schedule_name = cfgs.beta_schedule
+        self.T = cfgs.timesteps
+        self.max_frame = cfgs.max_frame
 
         self.params = self.__generate_params()
 
@@ -116,11 +117,11 @@ class DDPM(nn.Module):
         B = objs_feat.shape[0]
 
         lhand_motion = torch.randn(
-            [B, self.cfgs.max_frame, hand_motion_dim]).to(self.device)
+            [B, self.max_frame, hand_motion_dim]).to(self.device)
         rhand_motion = torch.randn(
-            [B, self.cfgs.max_frame, hand_motion_dim]).to(self.device)
+            [B, self.max_frame, hand_motion_dim]).to(self.device)
         obj_motion = torch.randn(
-            [B, self.cfgs.max_frame, obj_motion_dim]).to(self.device)
+            [B, self.max_frame, obj_motion_dim]).to(self.device)
 
         sample_lhand_motion, sample_rhand_motion, sample_obj_motion = self.ddpm_loop(
             lhand_motion, rhand_motion, obj_motion, objs_feat, text_feat 

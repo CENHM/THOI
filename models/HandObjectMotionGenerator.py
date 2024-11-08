@@ -5,7 +5,7 @@ import math
 import numpy as np
 
 from models.components.TransformerModel import PositionalEncoding, TimestepEmbedding, TransformerEncoder
-from models.components.Diffusiona import DiffusionModel
+from models.components.DDPM import DDPM
 from models.components.Linear import LinearLayers
 
 from utils.arguments import CFGS
@@ -17,32 +17,51 @@ from utils.utils import hand_type_selection
 class HandObjectMotionGenerator(nn.Module):
     def __init__(self,
             device,
+            cfgs,
+            inference,
+
             text_feat_dim=512,
-            objs_feat_dim=2049,
-            hand_dim=99,
-            objs_dim=10,
-            dim=512,
+            obj_feat_dim=2049,
+            hand_motion_dim=99, 
+            obj_motion_dim=10
         ):
         super(HandObjectMotionGenerator, self).__init__()
 
-        self.transformer_model = TransformerModel(device,
-                                                  text_feat_dim,
-                                                  objs_feat_dim,
-                                                  hand_dim,
-                                                  objs_dim,)
-        self.diffusion_model = DiffusionModel(denoise_model=self.transformer_model)
+        self.inference = inference
+        self.hand_motion_dim = hand_motion_dim
+        self.obj_motion_dim = obj_motion_dim
+
+        self.transformer_model = TransformerModel(
+            device=device,
+            text_feat_dim=text_feat_dim,
+            obj_feat_dim=obj_feat_dim,
+            hand_motion_dim=hand_motion_dim,
+            obj_motion_dim=obj_motion_dim
+        )
+        self.diffusion_model = DDPM(
+            device=device,
+            denoise_model=TransformerModel,
+            cfgs=cfgs,
+            denoise_model=self.transformer_model
+        )
 
     
     def forward(self, 
-        x_lhand, x_rhand, x_obj, 
-        timesteps, objs_feat, text_feat):
+        lhand_motion, rhand_motion, obj_motion, obj_feat, text_feat
+        ):
 
-        (lhand_pred_noise, rhand_pred_noise, obj_pred_noise), \
-            (lhand_noise, rhand_noise, obj_noise) = self.diffusion_model(x_lhand, x_rhand, x_obj, 
-                                                       objs_feat, timesteps, text_feat, not CFGS.inferencing)
+        if self.inference:
+            pred_lhand_motion, pred_rhand_motion, pred_obj_motion = self.diffusion_model(
+                lhand_motion, rhand_motion, obj_motion, 
+                obj_feat, text_feat
+            )
+        else:
+            pred_lhand_motion, pred_rhand_motion, pred_obj_motion = self.diffusion_model.sampling(
+                obj_feat, text_feat, 
+                self.hand_motion_dim, self.obj_motion_dim
+            )
         
-        return (lhand_pred_noise, rhand_pred_noise, obj_pred_noise), \
-               (lhand_noise, rhand_noise, obj_noise)
+        return pred_lhand_motion, pred_rhand_motion, pred_obj_motion
 
 
 
@@ -53,9 +72,9 @@ class TransformerModel(nn.Module):
     def __init__(self,
             device,
             text_feat_dim,
-            objs_feat_dim,
-            hand_dim,
-            objs_dim,
+            obj_feat_dim,
+            hand_motion_dim,
+            obj_motion_dim,
             dim=512,
         ):
         super(TransformerModel, self).__init__()
@@ -81,15 +100,15 @@ class TransformerModel(nn.Module):
 
 
         self.text_feat_emb = nn.Linear(text_feat_dim, dim)
-        self.objs_feat_emb = nn.Linear(objs_feat_dim, dim)
+        self.objs_feat_emb = nn.Linear(obj_feat_dim, dim)
 
-        self.lhand_emb = nn.Linear(hand_dim, dim)
-        self.rhand_emb = nn.Linear(hand_dim, dim)
-        self.obj_emb = nn.Linear(objs_dim, dim)
+        self.lhand_emb = nn.Linear(hand_motion_dim, dim)
+        self.rhand_emb = nn.Linear(hand_motion_dim, dim)
+        self.obj_emb = nn.Linear(obj_motion_dim, dim)
 
-        self.lhand_out_emb = nn.Linear(dim, hand_dim)
-        self.rhand_out_emb = nn.Linear(dim, hand_dim)
-        self.obj_out_emb = nn.Linear(dim, objs_dim)
+        self.lhand_out_emb = nn.Linear(dim, hand_motion_dim)
+        self.rhand_out_emb = nn.Linear(dim, hand_motion_dim)
+        self.obj_out_emb = nn.Linear(dim, obj_motion_dim)
     
     def forward(self, 
         x_lhand, x_rhand, x_obj, 
