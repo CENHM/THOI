@@ -353,7 +353,7 @@ def get_penetrate_dist(
     penetrate_dist = (dist * interior.unsqueeze(-1)).sum(dim=1)
     penetrate_dist = penetrate_dist.reshape(B, L, -1) *  hand_mask * frame_mask
 
-    return penetrate_dist.sum()
+    return penetrate_dist
 
 
 def get_close_joint_dist(

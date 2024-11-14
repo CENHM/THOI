@@ -68,13 +68,11 @@ def penetrate_loss(
     penet_dist_sum_lhand = get_penetrate_dist(
         point_cloud=point_cloud, 
         hand_verts=verts_lhand, hand_faces=faces_lhand,
-        hand_mask=mask_lhand, frame_mask=frame_mask
-        )
+        hand_mask=mask_lhand, frame_mask=frame_mask)
     penet_dist_sum_rhand = get_penetrate_dist(
         point_cloud=point_cloud, 
         hand_verts=verts_rhand, hand_faces=faces_rhand,
-        hand_mask=mask_rhand, frame_mask=frame_mask
-        )
+        hand_mask=mask_rhand, frame_mask=frame_mask)
     return l2_norm(penet_dist_sum_lhand) + l2_norm(penet_dist_sum_rhand)
 
 
@@ -89,12 +87,10 @@ def joint_loss(
         point_cloud=point_cloud, 
         hand_joint=joint_lhand,
         hand_mask=mask_lhand, frame_mask=frame_mask,
-        tau=tau
-        )
+        tau=tau)
     joint_dist_sum_rhand = get_close_joint_dist(
         point_cloud=point_cloud, 
         hand_joint=joint_rhand,
         hand_mask=mask_rhand, frame_mask=frame_mask,
-        tau=tau
-        )
+        tau=tau)
     return l2_norm(joint_dist_sum_lhand) + l2_norm(joint_dist_sum_rhand)
