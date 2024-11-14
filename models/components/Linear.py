@@ -11,7 +11,8 @@ class LinearLayers(nn.Module):
         layers_out_dim: list,
         activation_func=None,
         activation_func_param=None,
-        bn=False
+        bn=False,
+        sigmoid_output=True
     ):
         super().__init__()
         self.MLP = nn.Sequential()
@@ -30,6 +31,8 @@ class LinearLayers(nn.Module):
             if activation_func is not None:
                 self.MLP.append(activation_funcs[activation_func])
         self.MLP.append(nn.Linear(layers_out_dim[-2], layers_out_dim[-1]))
+        if sigmoid_output:
+            self.MLP.append(nn.Sigmoid())
 
     
     def forward(self, x):

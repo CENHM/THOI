@@ -30,6 +30,12 @@ class Configs:
                             help='Selected dataset [default: h2o]')
         # model setting
 
+        ## mano
+        parser.add_argument('--mano_model_path', 
+                            type=str, 
+                            default='./models/mano/models', 
+                            help='Pre-trained MANO model path [default: \'./models/mano/models\']')
+
         parser.add_argument('--n_head', 
                             type=int, 
                             default=4,
@@ -85,6 +91,10 @@ class Configs:
         parser.add_argument('-wd', '--weight_decay', 
                             type=float, default=0, 
                             help='Optimization L2 weight decay [default: 0]')
+        
+        parser.add_argument('--tau', 
+                            type=float, default=2, 
+                            help='hand-object distance threshold [default: 2]')
         # testing setting
         parser.add_argument('-rp', '--result_path', 
                             type=str, default='result/tmp/', 

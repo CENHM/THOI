@@ -1,55 +1,62 @@
 import torch
 import torch.nn as nn
 
-from models.components.TransformerModel import PositionalEncoding, TimestepEmbedding, TransformerEncoder
-
-from utils.arguments import CFGS
-from utils.utils import rot6d_to_rotmat
+from models.components.transformer import PositionalEncoding, TransformerEncoder
 
 
-
-class HandRefinementNetwork(nn.Module):
+class HandRefiner(nn.Module):
     def __init__(self,
+            cfgs,
+            device,
+            hand_motion_mask,
+            frame_padding_mask,
             obj_dim=10,
             hand_dim=99,
             hand_joint=21,
             hand_joint_dim=3,
-            n_point=CFGS.fps_npoint,
             hidden_dim=512,
         ):
-        super(HandRefinementNetwork, self).__init__()
+        super(HandRefiner, self).__init__()
 
+        self.device = device
         self.dim = hidden_dim
+        self.frame_padding_mask = frame_padding_mask
 
-        self.transformer_model = TransformerModel(hidden_dim=hidden_dim)
+        self.npoint = cfgs.fps_npoint
+
+        self.transformer_model = TransformerModel(
+            device=device,
+            hand_motion_mask=hand_motion_mask,
+            frame_padding_mask=frame_padding_mask,
+            hand_dim=hand_dim,
+            hidden_dim=hidden_dim
+        )
 
         # 99 + 3J + N + N + 3J
-        cat_dim = hand_dim + 2 * hand_joint * hand_joint_dim + n_point * 2
+        cat_dim = hand_dim + 2 * hand_joint * hand_joint_dim + self.npoint * 2
         
         self.fc_lhand = nn.Linear(in_features=cat_dim, out_features=hidden_dim)
         self.fc_rhand = nn.Linear(in_features=cat_dim, out_features=hidden_dim)
 
-        self.fc_out_lhand = nn.Linear(in_features=hidden_dim, out_features=hand_dim)
-        self.fc_out_rhand = nn.Linear(in_features=hidden_dim, out_features=hand_dim)
 
-    def __get_transformed_obj_pc(self, x_obj, point_cloud, dataset=CFGS.dataset):
-        """
-        /lib/utils/proc_output.py -> get_transformed_obj_pc
-        INPUT:
-            hand_joints: hand joints, [B, L, hand_joint, 3]
-            point_cloud: object's point cloud, [B, L, N, 3]
-        RETURN:
-            d: 3D displacement between hand joints and the nearest object points in point cloud, [B, L, hand_joint, 3]
-        """
-        B, L = x_obj.shape[:2]
+    # def __get_transformed_obj_pc(self, x_obj, point_cloud):
+    #     """
+    #     /lib/utils/proc_output.py -> get_transformed_obj_pc
+    #     INPUT:
+    #         hand_joints: hand joints, [B, L, hand_joint, 3]
+    #         point_cloud: object's point cloud, [B, L, N, 3]
+    #     RETURN:
+    #         d: 3D displacement between hand joints and the nearest object points in point cloud, [B, L, hand_joint, 3]
+    #     """
+    #     B, L = x_obj.shape[:2]
 
-        obj_trans = x_obj[..., 0:3]
-        obj_rot6d = x_obj[..., 3:9]
-        obj_rotmat = rot6d_to_rotmat(obj_rot6d).reshape(B, L, 3, 3)
+    #     obj_trans = x_obj[..., 0:3]
+    #     obj_rot6d = x_obj[..., 3:9]
+    #     obj_rotmat = rot6d_to_rotmat(obj_rot6d).reshape(B, L, 3, 3)
 
-        obj_pc_rotated = torch.einsum("btij,bkj->btki", obj_rotmat, point_cloud)
-        obj_pc_transformed = obj_pc_rotated + obj_trans.unsqueeze(2)
-        return obj_pc_transformed
+    #     obj_pc_rotated = torch.einsum("btij,bkj->btki", obj_rotmat, point_cloud)
+    #     obj_pc_transformed = obj_pc_rotated + obj_trans.unsqueeze(2)
+    #     return obj_pc_transformed
 
     def __get_attention_map(self,
             hand_joints, point_cloud         
@@ -84,7 +91,8 @@ class HandRefinementNetwork(nn.Module):
 
 
     def forward(self, 
-            x_lhand, x_rhand, j_lhand, j_rhand, m_contact, x_obj, point_cloud
+            x_lhand, x_rhand, j_lhand, j_rhand, m_contact,
+            ref_point_cloud_pred
         ):
         """
         INPUT:
@@ -102,22 +110,21 @@ class HandRefinementNetwork(nn.Module):
 
         B, L = x_lhand.shape[:2]
 
-        ref_point_cloud = self.__get_transformed_obj_pc(x_obj, point_cloud) 
-        att_map_lhand = self.__get_attention_map(j_lhand, ref_point_cloud)
-        att_map_rhand = self.__get_attention_map(j_rhand, ref_point_cloud)
+        att_map_lhand = self.__get_attention_map(j_lhand, ref_point_cloud_pred)
+        att_map_rhand = self.__get_attention_map(j_rhand, ref_point_cloud_pred)
         
         j_lhand = j_lhand.view(B, L, -1)
         j_rhand = j_rhand.view(B, L, -1)
 
         m_contact = m_contact.view(B, 1, -1).repeat(1, L, 1)
         # "computation of the norm is applied across the last dimension"
-        ref_point_cloud = ref_point_cloud.norm(dim=-1)
+        ref_point_cloud_pred = ref_point_cloud_pred.norm(dim=-1)
 
         att_map_lhand = att_map_lhand.view(B, L, -1)
         att_map_rhand = att_map_rhand.view(B, L, -1) 
 
-        x_lhand = torch.cat([x_lhand, j_lhand, m_contact, ref_point_cloud, att_map_lhand], dim=2)
-        x_rhand = torch.cat([x_rhand, j_rhand, m_contact, ref_point_cloud, att_map_rhand], dim=2)
+        x_lhand = torch.cat([x_lhand, j_lhand, m_contact, ref_point_cloud_pred, att_map_lhand], dim=2)
+        x_rhand = torch.cat([x_rhand, j_rhand, m_contact, ref_point_cloud_pred, att_map_rhand], dim=2)
 
         # hand input embedding layers
         x_lhand = self.fc_lhand(x_lhand)
@@ -125,23 +132,34 @@ class HandRefinementNetwork(nn.Module):
         
         x_lhand, x_rhand = self.transformer_model(x_lhand, x_rhand)
 
-        # hand output embedding layers
-        x_lhand = self.fc_out_lhand(x_lhand)
-        x_rhand = self.fc_out_rhand(x_rhand)
-
         return x_lhand, x_rhand
     
 
 class TransformerModel(nn.Module):
     def __init__(self,
+            device,
+            hand_dim,
             hidden_dim,
+            hand_motion_mask,
+            frame_padding_mask
         ):
         super(TransformerModel, self).__init__()
+
+        self.device = device
+        
+        self.mask_lhand = hand_motion_mask["mask_lhand"]
+        self.mask_rhand = hand_motion_mask["mask_rhand"]
+        self.frame_padding_mask = torch.where(~frame_padding_mask, 1.0, 0.0)
+
+        self.dim = hidden_dim
 
         self.frame_wise_pos_encoder = PositionalEncoding(d_model=hidden_dim, comp="hrn", encode_mode="frame-wise")
         self.agent_wise_pos_encoder = PositionalEncoding(d_model=hidden_dim, comp="hrn", encode_mode="agent-wise")
 
         self.encoder = TransformerEncoder(d_model=hidden_dim)
+
+        self.fc_out_lhand = nn.Linear(in_features=hidden_dim, out_features=hand_dim)
+        self.fc_out_rhand = nn.Linear(in_features=hidden_dim, out_features=hand_dim)
 
     
     def forward(self, 
@@ -157,15 +175,25 @@ class TransformerModel(nn.Module):
         """
         B, L = x_lhand.shape[0], x_lhand.shape[1]
 
-        x = torch.stack((x_lhand, x_rhand), dim=2)
-        x = x.view(B, 2*L, -1)
+        x = torch.zeros((B, 2*L, self.dim, )).to(self.device)
+        x[:, 0::2] = x_lhand
+        x[:, 1::2] = x_rhand
 
         x = self.frame_wise_pos_encoder(x)
         x = self.agent_wise_pos_encoder(x)
 
-        x = self.encoder(x)
+        x[:, 0::2] *= self.mask_lhand
+        x[:, 1::2] *= self.mask_rhand
+        x *= self.frame_padding_mask
+        
+        x = x.reshape(-1, B, self.dim)
+        x = self.encoder(x, self.frame_padding_mask)
+        x = x.reshape(B, -1, self.dim)
 
-        x_lhand = x[:, 0::2]
-        x_rhand = x[:, 1::2]
+        x_out_lhand = self.fc_out_lhand(x[:, 0::2])
+        x_out_rhand = self.fc_out_rhand(x[:, 1::2])
 
-        return x_lhand, x_rhand
+        x_out_lhand *= self.mask_lhand * self.frame_padding_mask[:, 0::2]
+        x_out_rhand *= self.mask_rhand * self.frame_padding_mask[:, 1::2]
+
+        return x_out_lhand, x_out_rhand

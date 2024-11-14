@@ -3,16 +3,18 @@ import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
 
-from models.components.Clip import Clip
-from models.components.PointNet import PointNet
-from models.components.Linear import LinearLayers
-
-from utils.arguments import CFGS
+from models.components.clip import Clip
+from models.components.pointnet import PointNet
+from models.components.linear import LinearLayers
 
 
-class ContactMapGeneration(nn.Module):
-    def __init__(self, device):
-        super(ContactMapGeneration, self).__init__()
+
+class ContactMapGenerator(nn.Module):
+    def __init__(self, 
+        device,
+        cfgs
+        ):
+        super(ContactMapGenerator, self).__init__()
 
         self.clip_text_encoder = Clip(device=device)
         self.pointnet = PointNet(init_k=3, device=device)
@@ -26,6 +28,7 @@ class ContactMapGeneration(nn.Module):
         )
 
         self.device = device
+        self.npoints = cfgs.fps_npoint
 
 
     def __compute_mesh_scale(self, vertices):
@@ -35,7 +38,7 @@ class ContactMapGeneration(nn.Module):
         # `s_obj` is also the maximum distance from the center of object mesh to its vertices.
         return s_obj
 
-    def __farthest_point_sample(self, xyz, npoint=CFGS.fps_npoint):
+    def __farthest_point_sample(self, xyz):
         """
         Input:
             xyz: pointcloud data, [B, N, 3]
@@ -46,12 +49,12 @@ class ContactMapGeneration(nn.Module):
         
         B, N, C = xyz.shape
 
-        centroids = torch.zeros(B, npoint).long().to(self.device)
+        centroids = torch.zeros(B, self.npoints).long().to(self.device)
         distance = torch.ones(B, N) * 1e10
         distance = distance.to(self.device)
         farthest = torch.randint(0, N, (B,)).long().to(self.device)
         batch_indices = torch.arange(B).long().to(self.device)
-        for i in range(npoint):
+        for i in range(self.npoints):
             centroids[:, i] = farthest
             centroid = xyz[batch_indices, farthest, :].reshape(B, 1, 3)
             dist = torch.sum(torch.square(xyz - centroid), -1)
@@ -60,7 +63,11 @@ class ContactMapGeneration(nn.Module):
             farthest = torch.max(distance, -1)[1]
         return centroids
     
-    def forward(self, text, mesh, contact_map=None):
+    def forward(self, 
+        text, mesh, 
+        inference,
+        contact_map=None
+        ):
         B = mesh.shape[0]
 
         object_scale = self.__compute_mesh_scale(mesh)
@@ -74,7 +81,7 @@ class ContactMapGeneration(nn.Module):
 
         text_feature = self.clip_text_encoder.extract_feature(text)
 
-        if not CFGS.inferencing:
+        if not inference:
             sample_contact_map = contact_map[batch_point_cloud_idx, point_cloud_idx]
             point_cloud_norm_contact = torch.cat([sample_contact_map, point_cloud_norm], dim=2)
             contact_vec, mu, log_var = self.contact_encoder(point_cloud_norm_contact)
@@ -86,10 +93,10 @@ class ContactMapGeneration(nn.Module):
         text_feature = text_feature.float()
         contact_vec = contact_vec.float()
 
-        object_scale_reshape = object_scale.reshape(B, 1, 1).repeat(1, CFGS.fps_npoint, 1)
-        global_feature_reshape = global_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
-        text_feature_reshape = text_feature.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
-        contact_vec_reshape = contact_vec.unsqueeze(1).repeat(1, CFGS.fps_npoint, 1)
+        object_scale_reshape = object_scale.reshape(B, 1, 1).repeat(1, self.npoints, 1)
+        global_feature_reshape = global_feature.unsqueeze(1).repeat(1, self.npoints, 1)
+        text_feature_reshape = text_feature.unsqueeze(1).repeat(1, self.npoints, 1)
+        contact_vec_reshape = contact_vec.unsqueeze(1).repeat(1, self.npoints, 1)
 
         concatenate_feature = torch.cat([global_feature_reshape, 
                                          local_feature, 
@@ -99,10 +106,20 @@ class ContactMapGeneration(nn.Module):
         
         refine_contact_map = self.contact_decoder(concatenate_feature)
 
-        if not CFGS.inferencing:
-            return refine_contact_map, sample_contact_map, (global_feature, object_scale, text_feature), (mu, log_var)
-        else:
-            return refine_contact_map, (global_feature, object_scale, text_feature)
+        return_dict = {
+            "ref_contact_map": refine_contact_map,
+            "global_feature": global_feature, 
+            "object_scale": object_scale, 
+            "text_feature": text_feature,
+            "point_cloud": point_cloud
+        }
+
+        if not inference:
+            return_dict["sample_contact_map"] = sample_contact_map
+            return_dict["mu"] = mu
+            return_dict["log_var"] = log_var
+
+        return return_dict
         
     
 

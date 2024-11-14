@@ -11,3 +11,7 @@ log.txt
 results/
 
 debugger.py
+
+demo_utils/
+
+models/mano/models/

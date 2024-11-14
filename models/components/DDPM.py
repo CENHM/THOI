@@ -4,6 +4,8 @@ import math
 import torch
 import torch.nn as nn
 
+from models.components.linear import LinearLayers
+
 def betas_for_alpha_bar(num_diffusion_timesteps, alpha_bar, max_beta=0.999):
     """
     Create a beta schedule that discretizes the given alpha_t_bar function,
@@ -48,15 +50,17 @@ class DDPM(nn.Module):
 
         self.params = self.__generate_params()
 
+        
+
     def __generate_params(self):
         if self.schedule_name == "cosine":
-            betas = betas_for_alpha_bar(self.T, lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,)
+            betas = betas_for_alpha_bar(self.T, lambda t: math.cos((t + 0.008) / 1.008 * math.pi / 2) ** 2,).to(self.device)
         else:
-            betas = torch.linspace(start = self.beta_1, end=self.beta_T, steps=self.T)
+            betas = torch.linspace(start = self.beta_1, end=self.beta_T, steps=self.T).to(self.device)
         alphas = 1. - betas
         # \bar{alpha_t} = \prod^{t}_{i=1} alpha_i
         alpha_bars = torch.cumprod(alphas, dim=0)
-        alpha_bars_prev = torch.cat([torch.Tensor([1]).float(), alpha_bars[:-1]])
+        alpha_bars_prev = torch.cat([torch.Tensor([1]).float().to(self.device), alpha_bars[:-1]])
 
         posterior_variance = betas * (1. - alpha_bars_prev) / (1. - alpha_bars)
         
@@ -78,7 +82,8 @@ class DDPM(nn.Module):
         self, 
         lhand_motion, rhand_motion, obj_motion,         
         obj_feat, text_feat,
-        timesteps=None
+        frame_len=None,
+        timesteps=None,
         ):
 
         B = lhand_motion.shape[0]
@@ -97,9 +102,9 @@ class DDPM(nn.Module):
         else:
             timesteps = torch.Tensor(
                 [timesteps for _ in range(B)]).to(self.device).long()
-            x_tilde_lhand = lhand_motion
-            x_tilde_rhand = rhand_motion
-            x_tilde_obj = obj_motion
+            x_tilde_lhand = lhand_motion[:, :frame_len, :]
+            x_tilde_rhand = rhand_motion[:, :frame_len, :]
+            x_tilde_obj = obj_motion[:, :frame_len, :]
 
         pred_X0_lhand, pred_X0_rhand, pred_X0_obj = self.denoise_model(
             x_tilde_lhand, x_tilde_rhand, x_tilde_obj, 
@@ -111,26 +116,32 @@ class DDPM(nn.Module):
     
     @torch.no_grad()
     def sampling(
-        self, objs_feat, text_feat, hand_motion_dim, obj_motion_dim
+        self, 
+        objs_feat, text_feat, 
+        hand_motion_dim, obj_motion_dim,
+        frame_len
         ):
 
         B = objs_feat.shape[0]
 
         lhand_motion = torch.randn(
-            [B, self.max_frame, hand_motion_dim]).to(self.device)
+            [B, frame_len, hand_motion_dim]).to(self.device)
         rhand_motion = torch.randn(
-            [B, self.max_frame, hand_motion_dim]).to(self.device)
+            [B, frame_len, hand_motion_dim]).to(self.device)
         obj_motion = torch.randn(
-            [B, self.max_frame, obj_motion_dim]).to(self.device)
+            [B, frame_len, obj_motion_dim]).to(self.device)
 
         sample_lhand_motion, sample_rhand_motion, sample_obj_motion = self.ddpm_loop(
-            lhand_motion, rhand_motion, obj_motion, objs_feat, text_feat 
+            lhand_motion, rhand_motion, obj_motion, 
+            objs_feat, text_feat
         )
 
         return sample_lhand_motion, sample_rhand_motion, sample_obj_motion
     
     def ddpm_loop(
-        self, lhand_motion, rhand_motion, obj_motion, obj_feat, text_feat  
+        self, 
+        lhand_motion, rhand_motion, obj_motion, 
+        obj_feat, text_feat,
         ):
 
         for t in tqdm.tqdm(
@@ -145,7 +156,7 @@ class DDPM(nn.Module):
 
             pred_X0_lhand, pred_X0_rhand, pred_X0_obj = self.forward(
                 lhand_motion, rhand_motion, obj_motion, 
-                obj_feat, text_feat,
+                obj_feat, text_feat, 
                 timesteps=t)
             
             beta = self.params["betas"][t]
