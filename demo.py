@@ -11,7 +11,6 @@ from utils.loss import (
     kl_divergence_loss,
     penetrate_loss,
     refine_loss,)
-
 from utils.utils import (
     get_deformed_obj_point_cloud,
     get_hand_motion_mask, 
@@ -92,10 +91,6 @@ hand_motion_mask = get_hand_motion_mask(
     contact_map_generator_result["text_feature"], 
     device=DEVICE)
 
-# hand_motion_mask = align_frame_for_component(
-#     x=hand_motion_mask, x_type="hand_motion_mask", 
-#     frame_len=pad_len, 
-#     device=DEVICE)
 
 frame_mask, frame_mask_seq, frame_mask_seq_cond = get_padding_mask(
     batch_size=B, 

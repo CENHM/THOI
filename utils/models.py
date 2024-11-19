@@ -1,7 +1,7 @@
 import torch
 from torch.nn import functional as F
 
-import models.mano.mano.model as mano
+import models.components.mano.mano.model as mano
 from models.components.linear import LinearLayers
 from utils.rotation import rot6d_to_axis_angle
 from utils.utils import reshape_mesh_form

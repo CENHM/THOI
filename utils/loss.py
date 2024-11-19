@@ -3,7 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-from utils.utils import get_close_joint_dist, get_joint_obj_dist_map, get_deformed_obj_point_cloud, align_frame_for_component, get_penetrate_dist
+from utils.utils import (
+    get_close_joint_dist, 
+    get_penetrate_dist)
+
 
 def l2_loss(pred, gt):
     l2_loss_cal = nn.MSELoss()
