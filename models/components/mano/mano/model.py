@@ -21,8 +21,10 @@ from __future__ import division
 import os
 import os.path as osp
 
-
-import pickle
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 import numpy as np
 
@@ -33,7 +35,7 @@ import torch.nn as nn
 
 from .lbs import lbs
 from .utils import Struct, to_np, to_tensor
-from .utils import Mesh, points2sphere, colors
+from .utils import Mesh,points2sphere, colors
 from .joints_info import TIP_IDS
 
 ModelOutput = namedtuple('ModelOutput',

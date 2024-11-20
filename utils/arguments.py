@@ -33,7 +33,7 @@ class Configs:
         ## mano
         parser.add_argument('--mano_model_path', 
                             type=str, 
-                            default='./models/mano/models', 
+                            default='./models/components/mano/models', 
                             help='Pre-trained MANO model path [default: \'./models/mano/models\']')
 
         parser.add_argument('--n_head', 
