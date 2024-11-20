@@ -2,7 +2,7 @@
 
 Original implimentation: https://github.com/JunukCha/Text2HOI
 
-# Installation
+# 1. Installation
 
 Create an environment and activate it.
 
@@ -23,7 +23,7 @@ $ pip install matplotlib
 $ pip install tqdm
 ```
 
-## CLIP dependencies
+## 1.1. CLIP dependencies
 
 Install additional dependencies and official [CLIP](https://github.com/openai/CLIP) repo as a Python package.
 ```
@@ -31,7 +31,7 @@ $ pip install ftfy regex
 $ pip install git+https://github.com/openai/CLIP.git
 ```
 
-## MANO model and code
+## 1.2. MANO model and code
 
 We use [MANO](https://mano.is.tue.mpg.de/) model and some part of Taheri's [code](https://github.com/otaheri/MANO). Note that you should follow the licenses of each repository you download.
 
