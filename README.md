@@ -1,4 +1,4 @@
-# Text2HOI Replication
+# Text-based Hand-object Interaction
 
 Original implimentation: https://github.com/JunukCha/Text2HOI
 
@@ -46,7 +46,7 @@ We use [MANO](https://mano.is.tue.mpg.de/) model and some part of Taheri's [code
 
 Your folder structure should look like this:
 ```
-Text2HOI
+THOI
 |-- models
     |-- components
         |-- mano
