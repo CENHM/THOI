@@ -8,10 +8,22 @@ from utils.utils import reshape_mesh_form
 
 
 def mano_layer(
-    model_path,
-    is_rhand,
-    batch_size,
+    model_path: str,
+    is_rhand: bool,
+    batch_size: int,
     ):
+    """
+    Return MANO model for left/right hand.
+    PARAMS:
+        model_path: str
+            Directory that keeps MANO .pkl models.
+        is_rhand: bool
+            Load left or right hand model, boolean,
+        batch_size: int
+            Training / inferencing batch size.
+    RETURN:
+        MANO model: nn.Module
+    """
     return mano.load(
         model_path=model_path,
         is_rhand=is_rhand,

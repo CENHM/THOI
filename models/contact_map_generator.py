@@ -16,9 +16,12 @@ class ContactMapGenerator(nn.Module):
         ):
         super(ContactMapGenerator, self).__init__()
 
+        self.device = device
+        self.npoints = cfgs.fps_npoint
+
         self.clip_text_encoder = Clip(device=device)
         self.pointnet = PointNet(init_k=3, device=device)
-        self.contact_encoder = ContactEncoder(device=device)
+        self.contact_encoder = ContactEncoder(device)
         self.contact_decoder = LinearLayers(
             in_dim=1665, 
             layers_out_dim=[512, 256, 128, 1], 
@@ -26,10 +29,6 @@ class ContactMapGenerator(nn.Module):
             activation_func_param=0.02, 
             bn=False
         )
-
-        self.device = device
-        self.npoints = cfgs.fps_npoint
-
 
     def __compute_mesh_scale(self, vertices):
         centroid = torch.mean(vertices, dim=1)
@@ -40,10 +39,9 @@ class ContactMapGenerator(nn.Module):
 
     def __farthest_point_sample(self, xyz):
         """
-        Input:
+        PARAMS:
             xyz: pointcloud data, [B, N, 3]
-            npoint: number of samples
-        Return:
+        RETURN:
             centroids: sampled pointcloud index, [B, npoint]
         """
         
@@ -125,8 +123,8 @@ class ContactMapGenerator(nn.Module):
 
 class ContactEncoder(nn.Module):
     def __init__(self, 
-        device=None
-    ):
+        device
+        ):
         super(ContactEncoder, self).__init__()
 
         self.pointnet_structure = PointNet(init_k=4, local_feat=False, device=device)
@@ -143,7 +141,7 @@ class ContactEncoder(nn.Module):
         eps = torch.randn_like(std)
         return mu + eps * std
 
-    def forward(self, x): # B, N, D
+    def forward(self, x): # [B, N, D]
         x = self.pointnet_structure(x)
 
         x = self.mlp(x)

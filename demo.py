@@ -39,22 +39,12 @@ torch.Tensor.__repr__ = lambda self: f"{self.shape}_{normal_repr(self)}"
 
 # ==============================================================================
 
-lhand_mano_model = mano_layer(
-    model_path=CFGS.mano_model_path,
-    is_rhand=False,
-    batch_size=B
-    ).to(DEVICE)
+lhand_mano_model = mano_layer(CFGS.mano_model_path, False, B).to(DEVICE)
+rhand_mano_model = mano_layer(CFGS.mano_model_path, True, B).to(DEVICE)
 
-rhand_mano_model = mano_layer(
-    model_path=CFGS.mano_model_path,
-    is_rhand=True,
-    batch_size=B
-    ).to(DEVICE)
 
-contact_map_generator = ContactMapGenerator(
-    device=DEVICE,
-    cfgs=CFGS
-    ).to(DEVICE)
+contact_map_generator = ContactMapGenerator(DEVICE, CFGS).to(DEVICE)
+
 
 if not inference:
     contact_map_generator_result = contact_map_generator(text, mesh, inference, contact_map)
@@ -79,18 +69,13 @@ after_pad_len = CFGS.max_frame
 
 pred_frame_len = frame_len_prediction(
     contact_map_generator_result["text_feature"],
-    CFGS.max_frame,
-    batch_size=B,
-    device=DEVICE)
+    CFGS.max_frame, B, DEVICE)
 
-orig_frame_len = frame_len_original(
-    gt_motion, 
-    device=DEVICE)
+orig_frame_len = frame_len_original(gt_motion, DEVICE)
 
 hand_motion_mask = get_hand_motion_mask(
     contact_map_generator_result["text_feature"], 
-    device=DEVICE)
-
+    DEVICE)
 
 frame_mask, frame_mask_seq, frame_mask_seq_cond = get_padding_mask(
     batch_size=B, 
@@ -269,24 +254,24 @@ if not inference:
         ref_motion_rhand, gt_motion_rhand)
 
     ref_penet_loss = penetrate_loss(
-        point_cloud=ref_point_cloud_pred, 
-        verts_lhand=ref_mano_lhand["hand_verts"], 
-        faces_lhand=ref_mano_lhand["hand_faces"], 
-        mask_lhand=hand_motion_mask["mask_lhand"],
-        verts_rhand=ref_mano_rhand["hand_verts"], 
-        faces_rhand=ref_mano_rhand["hand_verts"], 
-        mask_rhand=hand_motion_mask["mask_rhand"],
-        frame_mask=frame_mask
+        ref_point_cloud_pred, 
+        ref_mano_lhand["hand_verts"], 
+        ref_mano_lhand["hand_faces"], 
+        hand_motion_mask["mask_lhand"],
+        ref_mano_rhand["hand_verts"], 
+        ref_mano_rhand["hand_verts"], 
+        hand_motion_mask["mask_rhand"],
+        frame_mask
     )
 
     ref_joint_loss = joint_loss(
-        point_cloud=ref_point_cloud_pred, 
-        joint_lhand=ref_mano_lhand["hand_joint"], 
-        mask_lhand=hand_motion_mask["mask_lhand"],
-        joint_rhand=ref_mano_rhand["hand_joint"], 
-        mask_rhand=hand_motion_mask["mask_rhand"],
-        frame_mask=frame_mask,
-        tau=CFGS.tau
+        ref_point_cloud_pred, 
+        ref_mano_lhand["hand_joint"], 
+        hand_motion_mask["mask_lhand"],
+        ref_mano_rhand["hand_joint"], 
+        hand_motion_mask["mask_rhand"],
+        frame_mask,
+        CFGS.tau
     )
 
 pass
