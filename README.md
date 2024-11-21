@@ -40,8 +40,9 @@ We use [MANO](https://mano.is.tue.mpg.de/) model and some part of Taheri's [code
 - Download Taheri's [code](https://github.com/otaheri/MANO), copy the `mano` folder into `.../Text2HOI/models/components/mano` 
 - Install additional dependencies.
   ```
-  $ pip install trimesh
-  $ pip install chumpy
+  $ pip install trimesh==4.5.2
+  $ pip install chumpy==0.70
+  $ pip install pyglet==1.5.22
   ```
 
 Your folder structure should look like this:
