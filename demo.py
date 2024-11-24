@@ -4,10 +4,10 @@ from utils.arguments import CFGS
 from utils.loss import (
     binary_cross_entropy_loss, 
     dice_loss,
-    joint_loss, 
+    contect_loss, 
     l2_loss, 
     dm_loss, 
-    or_loss, 
+    orient_loss, 
     kl_divergence_loss,
     penetrate_loss,
     refine_loss,)
@@ -19,7 +19,7 @@ from utils.utils import (
     estimated_distance_maps,
     relative_3d_orientation_diff, 
     align_frame_for_component,)
-from utils.models import (
+from models.components.mano.utils import (
     get_mano_result,
     mano_layer,
     frame_len_prediction,)
@@ -80,7 +80,7 @@ hand_motion_mask = get_hand_motion_mask(
 frame_mask, frame_mask_seq, frame_mask_seq_cond = get_padding_mask(
     batch_size=B, 
     frame_len=after_pad_len, 
-    orig_frame_len=orig_frame_len, 
+    true_frame_len=orig_frame_len, 
     pred_frame_len=pred_frame_len, 
     device=DEVICE)
 
@@ -209,7 +209,7 @@ if not inference:
         pred_motion_rhand, pred_motion_obj,
         hand_mask=hand_motion_mask["mask_rhand"], frame_mask=frame_mask)
 
-    orientation_loss = or_loss(
+    orientation_loss = orient_loss(
         lhand_diff_pred=lhand_relative_orientation_diff_pred, 
         lhand_diff=lhand_relative_orientation_diff,
         rhand_diff_pred=rhand_relative_orientation_diff_pred, 
@@ -264,7 +264,7 @@ if not inference:
         frame_mask
     )
 
-    ref_joint_loss = joint_loss(
+    ref_joint_loss = contect_loss(
         ref_point_cloud_pred, 
         ref_mano_lhand["hand_joint"], 
         hand_motion_mask["mask_lhand"],

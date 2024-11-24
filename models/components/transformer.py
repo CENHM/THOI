@@ -95,7 +95,8 @@ class TransformerEncoder(nn.Module):
             d_model=d_model, 
             nhead=n_head, 
             dim_feedforward=d_model * 2,
-            activation=activation
+            activation=activation,
+            batch_first=True
         )
         self.encoder = nn.TransformerEncoder(
             self.encoder_layer, 

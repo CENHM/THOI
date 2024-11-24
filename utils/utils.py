@@ -5,12 +5,26 @@ from torch.nn import functional as F
 
 from models.components.clip import Clip
 from utils.rotation import rot6d_to_rotmat
+import pandas as pd
+import open3d
+
+
+def params_to_device(params, device):
+    return {k: v.to(device) if torch.is_tensor(v) else v for k, v in params.items()}
+
+
+def params_to_torch(params, dtype=torch.float32, **kwargs):
+    if "start" in kwargs and "end" in kwargs:
+        return {k: torch.from_numpy(v[kwargs['start']:kwargs['end']]).type(dtype) for k, v in params.items()}
+    return {k: torch.from_numpy(v).type(dtype) for k, v in params.items()}
 
 
 def get_hand_motion_mask(text_feat, device):
     '''
-    :RETURN
-        hand_motion_mask: [B, 1, 1]
+    Mask inputs which are not belonging to the estimated hand type.
+    - Returns:
+        dict, {"mask_lhand":[B, 1, 1], "mask_rhand":[B, 1, 1]}
+            Mask for left and right hand.
     '''
     clip_text_encoder = Clip(device=device)
     cos_similarity_cal = nn.CosineSimilarity(dim=2, eps=1e-6)
@@ -62,6 +76,18 @@ def align_frame(x_dict, device):
             x_final[i, :L_curr] = data
         x_pad_dict[key] = x_final
     return x_pad_dict, L_max
+
+
+def align_param_size(data_dict, max_len):
+    data_aligned_dict = {}
+    for key, value in data_dict.items():
+        if key == "lh_motion" or key == "rh_motion":
+            data_final = torch.zeros((max_len, 99)).float()
+        elif key == "obj_motion":
+            data_final = torch.zeros((max_len, 10)).float()
+        data_final[:value.shape[0]] = value
+        data_aligned_dict[key] = data_final
+    return data_aligned_dict
  
 
 
@@ -109,7 +135,7 @@ def frame_len_original(x_dict, device):
 def get_padding_mask( 
     batch_size, 
     frame_len, 
-    orig_frame_len, 
+    true_frame_len, 
     pred_frame_len, 
     device,
     ):
@@ -118,7 +144,7 @@ def get_padding_mask(
         [B, L, 1], [B, 2 * L, 1], [B, 3 * L + 1, 1]
     '''
 
-    frame_padding_mask = torch.arange(frame_len).expand(batch_size, frame_len).to(device) >= orig_frame_len
+    frame_padding_mask = torch.arange(frame_len).expand(batch_size, frame_len).to(device) >= true_frame_len
     frame_padding_mask = frame_padding_mask
 
     pred_framelen_mask = torch.arange(frame_len).expand(batch_size, frame_len).to(device) >= pred_frame_len
@@ -265,11 +291,12 @@ def compute_face_norms(verts, faces):
     Compute the normal vector of the hand mesh face.
     :PARAMS 
         verts: Hand mesh vertices coordinate xyz, [B, V, 3]
-        faces: Hand mesh faces (vertices index), [B, F, 3]
+        faces: Hand mesh faces (vertices index), [1, T, 3]
     :RETURN
         vert_norm_vecs: Normal vector of each vertices, [B, V, 3]
     '''
-    faces = faces.long()
+    B = verts.shape[0]
+    faces = faces.repeat(B, 1, 1).long()
 
     v0 = verts.gather(1, faces[:, :, 0:1].expand(-1, -1, 3)).float()  # [B, F, 3] 
     v1 = verts.gather(1, faces[:, :, 1:2].expand(-1, -1, 3)).float()  # [B, F, 3] 
@@ -289,15 +316,15 @@ def compute_vert_norms(verts, faces):
     Compute the normal vector of the hand mesh vertices.
     :PARAMS 
         verts: Hand mesh vertices coordinate xyz, [B, V, 3]
-        faces: Hand mesh faces (vertices index), [B, P, 3]
+        faces: Hand mesh faces (vertices index), [1, T, 3]
     :RETURN
         vert_norm_vecs: Normal vector of each vertices, [B, V, 3]
     '''
     B, V, _ = verts.shape
-    _, P, _ = faces.shape
+    _, T, _ = faces.shape
     
     face_norms = compute_face_norms(verts, faces)  # [B, P, 3]
-    faces = faces.view(B, P, 3).long()
+    faces = faces.long()
     vert_norm_vecs = torch.zeros(B, V, 3, device=verts.device).float()  # [B, V, 3]
     vert_norm_vecs.scatter_add_(dim=1, index=faces, src=face_norms)  # [B, V, 3]
     vert_norm_vecs = vert_norm_vecs / torch.norm(vert_norm_vecs, dim=2, keepdim=True)
@@ -340,11 +367,11 @@ def get_penetrate_dist(
         vert_norm_vecs: Normal vector of each vertices, [B, V, 3]
     '''
     B, L = point_cloud.shape[0], hand_verts.shape[1]
-    N, V, P = point_cloud.shape[2], hand_verts.shape[2], hand_faces.shape[2]
+    N, V, T = point_cloud.shape[2], hand_verts.shape[2], hand_faces.shape[0]
     
     point_cloud = point_cloud.reshape(-1, N, 3)
     hand_verts = hand_verts.reshape(-1, V, 3)
-    hand_faces = hand_faces.reshape(-1, P, 3)
+    hand_faces = hand_faces.reshape(-1, T, 3)
 
     hand_normal = compute_vert_norms(hand_verts, hand_faces)
     dist, idx = get_nearest_neighbor(hand_verts, point_cloud)
@@ -374,5 +401,9 @@ def get_close_joint_dist(
     dist = dist.reshape(B, L, -1) * hand_mask * frame_mask
 
     return dist.sum()
+
+def clone_detach_dict_tensor(d: dict):
+    return {k: v.clone().detach() for k, v in d.items()}
+
 
 

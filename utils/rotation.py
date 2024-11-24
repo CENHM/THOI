@@ -4,115 +4,15 @@ import torch
 import torch.nn.functional as F
 
 
-def get_rotmat_x(radians):
-    x_rotmat = np.array(
-        [
-            [1,                 0,                  0],
-            [0,   np.cos(radians),   -np.sin(radians)],
-            [0,   np.sin(radians),    np.cos(radians)]
-        ]
-    )
-    return x_rotmat
-
-def get_rotmat_y(radians):
-    y_rotmat = np.array(
-        [
-            [ np.cos(radians),  0, np.sin(radians)],
-            [               0,  1,               0],
-            [-np.sin(radians),  0, np.cos(radians)]
-        ]
-    )
-    return y_rotmat
-
-def get_rotmat_z(radians):
-    z_rotmat = np.array(
-        [
-            [np.cos(radians), -np.sin(radians), 0], 
-            [np.sin(radians),  np.cos(radians), 0], 
-            [                0,                  0, 1], 
-        ]
-    )
-    return z_rotmat
-
-def axis_angle_to_rot6d(axis_angle):
-    return rotmat_to_rot6d(
-            axis_angle_to_rotmat(
-                axis_angle
-            )
-        )
-
-def rot6d_to_axis_angle(rot6d):
-    return rotation_matrix_to_angle_axis(
-            rot6d_to_rotmat(
-                rot6d
-            )
-        )
-
-def axis_angle_to_rotmat(axis_angle):
-    return quaternion_to_rotation_matrix(
-            axis_angle_to_quaternion(
-                axis_angle
-            )
-        )
-
-def quaternion_to_rotation_matrix(quat):
-    """Convert quaternion coefficients to rotation matrix.
-    Args:
-        quat: size = [B, 4] 4 <===>(w, x, y, z)
-    Returns:
-        Rotation matrix corresponding to the quaternion -- size = [B, 3, 3]
-    """
-    norm_quat = quat
-    norm_quat = norm_quat / norm_quat.norm(p=2, dim=1, keepdim=True)
-    w, x, y, z = norm_quat[:, 0], norm_quat[:, 1], norm_quat[:, 2], norm_quat[:, 3]
-
-    B = quat.size(0)
-
-    w2, x2, y2, z2 = w.pow(2), x.pow(2), y.pow(2), z.pow(2)
-    wx, wy, wz = w * x, w * y, w * z
-    xy, xz, yz = x * y, x * z, y * z
-
-    rotMat = torch.stack(
-        [
-            w2 + x2 - y2 - z2,
-            2 * xy - 2 * wz,
-            2 * wy + 2 * xz,
-            2 * wz + 2 * xy,
-            w2 - x2 + y2 - z2,
-            2 * yz - 2 * wx,
-            2 * xz - 2 * wy,
-            2 * wx + 2 * yz,
-            w2 - x2 - y2 + z2,
-        ],
-        dim=1,
-    ).view(B, 3, 3)
-    return rotMat
+def rotvec_to_rot6d(x):
+    return rotmat_to_rot6d(rotvec_to_rotmat(x))
 
 
-def rot6d_to_rotmat(x):
-    """Convert 6D rotation representation to 3x3 rotation matrix.
-    Based on Zhou et al., "On the Continuity of Rotation Representations in Neural Networks", CVPR 2019
-    Input:
-        (B,6) Batch of 6-D rotation representations
-    Output:
-        (B,3,3) Batch of corresponding rotation matrices
-    """
-    x_shape = x.shape
-    x = x.reshape(-1, 3, 2)
-    a1 = x[:, :, 0]
-    a2 = x[:, :, 1]
-    b1 = F.normalize(a1)
-    b2 = F.normalize(a2 - torch.einsum("bi,bi->b", b1, a2).unsqueeze(-1) * b1)
-    b3 = torch.cross(b1, b2)
+def rot6d_to_rotvec(x):
+    return rotmat_to_rotvec(rot6d_to_rotmat(x))
 
-    return torch.stack((b1, b2, b3), dim=-1).reshape(x_shape[:-1] + (3, 3))
 
-def rotmat_to_rot6d(x):
-    rotmat = x.reshape(-1, 3, 3)
-    rot6d = rotmat[:, :, :2].reshape(x.shape[0], -1)
-    return rot6d
-
-def rotation_matrix_to_angle_axis(rotation_matrix):
+def rotmat_to_rotvec(rotation_matrix):
     """
     This function is borrowed from https://github.com/kornia/kornia
 
@@ -145,6 +45,61 @@ def rotation_matrix_to_angle_axis(rotation_matrix):
     aa = quaternion_to_angle_axis(quaternion)
     aa[torch.isnan(aa)] = 0.0
     return aa
+
+
+def rotvec_to_rotmat(x: torch.tensor):
+    """ 
+    Calculates the rotation matrices for a batch of rotation vectors
+    Params:
+        x: torch.tensor [N, 3]
+           Tensor of N axis-angle vectors.
+    Returns:
+        rotmat: torch.tensor [N, 3, 3]
+           The rotation matrices for the given axis-angle parameters
+    """
+    B = x.shape[0]
+    device, dtype = x.device, x.dtype
+
+    angle = torch.norm(x + 1e-8, dim=1, keepdim=True)
+    raxis = x / angle
+
+    cos = torch.unsqueeze(torch.cos(angle), dim=1)
+    sin = torch.unsqueeze(torch.sin(angle), dim=1)
+
+    rx, ry, rz = torch.split(raxis, 1, dim=1)
+    K = torch.zeros((B, 3, 3), dtype=dtype, device=device)
+
+    zeros = torch.zeros((B, 1), dtype=dtype, device=device)
+    K = torch.cat([zeros, -rz, ry, rz, zeros, -rx, -ry, rx, zeros], dim=1).view((B, 3, 3))
+    ident = torch.eye(3, dtype=dtype, device=device).unsqueeze(dim=0)
+    rotmat = ident + sin * K + (1 - cos) * torch.bmm(K, K)
+    return rotmat
+
+
+def rot6d_to_rotmat(x):
+    """Convert 6D rotation representation to 3x3 rotation matrix.
+    Based on Zhou et al., "On the Continuity of Rotation Representations in Neural Networks", CVPR 2019
+    Input:
+        (B,6) Batch of 6-D rotation representations
+    Output:
+        (B,3,3) Batch of corresponding rotation matrices
+    """
+    x_shape = x.shape
+    x = x.reshape(-1, 3, 2)
+    a1 = x[:, :, 0]
+    a2 = x[:, :, 1]
+    b1 = F.normalize(a1)
+    b2 = F.normalize(a2 - torch.einsum("bi,bi->b", b1, a2).unsqueeze(-1) * b1)
+    b3 = torch.cross(b1, b2, dim=1)
+
+    return torch.stack((b1, b2, b3), dim=-1).reshape(x_shape[:-1] + (3, 3))
+
+
+def rotmat_to_rot6d(x):
+    rotmat = x.reshape(-1, 3, 3)
+    rot6d = rotmat[:, :, :2].reshape(x.shape[0], -1)
+    return rot6d
+
 
 def quaternion_to_angle_axis(quaternion: torch.Tensor) -> torch.Tensor:
     """
@@ -316,96 +271,3 @@ def rotation_matrix_to_quaternion(rotation_matrix, eps=1e-6):
     )  # noqa
     q *= 0.5
     return q
-
-def axis_angle_to_quaternion(axis_angle):
-    """
-    Source: https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
-    Convert rotations given as axis/angle to quaternions.
-    Args:
-        axis_angle: Rotations given as a vector in axis angle form,
-            as a tensor of shape (..., 3), where the magnitude is
-            the angle turned anticlockwise in radians around the
-            vector's direction.
-    Returns:
-        quaternions with real part first, as tensor of shape (..., 4).
-    """
-    angles = torch.norm(axis_angle, p=2, dim=-1, keepdim=True)
-    half_angles = angles * 0.5
-    eps = 1e-6
-    small_angles = angles.abs() < eps
-    sin_half_angles_over_angles = torch.empty_like(angles)
-    sin_half_angles_over_angles[~small_angles] = (
-        torch.sin(half_angles[~small_angles]) / angles[~small_angles]
-    )
-    # for x small, sin(x/2) is about x/2 - (x/2)^3/6
-    # so sin(x/2)/x is about 1/2 - (x*x)/48
-    sin_half_angles_over_angles[small_angles] = (
-        0.5 - (angles[small_angles] * angles[small_angles]) / 48
-    )
-    quaternions = torch.cat(
-        [torch.cos(half_angles), axis_angle * sin_half_angles_over_angles], dim=-1
-    )
-    return quaternions
-
-
-def quaternion_raw_multiply(a, b):
-    """
-    Source: https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
-    Multiply two quaternions.
-    Usual torch rules for broadcasting apply.
-
-    Args:
-        a: Quaternions as tensor of shape (..., 4), real part first.
-        b: Quaternions as tensor of shape (..., 4), real part first.
-
-    Returns:
-        The product of a and b, a tensor of quaternions shape (..., 4).
-    """
-    aw, ax, ay, az = torch.unbind(a, -1)
-    bw, bx, by, bz = torch.unbind(b, -1)
-    ow = aw * bw - ax * bx - ay * by - az * bz
-    ox = aw * bx + ax * bw + ay * bz - az * by
-    oy = aw * by - ax * bz + ay * bw + az * bx
-    oz = aw * bz + ax * by - ay * bx + az * bw
-    return torch.stack((ow, ox, oy, oz), -1)
-
-
-def quaternion_apply(quaternion, point):
-    """
-    Source: https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
-    Apply the rotation given by a quaternion to a 3D point.
-    Usual torch rules for broadcasting apply.
-
-    Args:
-        quaternion: Tensor of quaternions, real part first, of shape (..., 4).
-        point: Tensor of 3D points of shape (..., 3).
-
-    Returns:
-        Tensor of rotated points of shape (..., 3).
-    """
-    if point.size(-1) != 3:
-        raise ValueError(f"Points are not in 3D, f{point.shape}.")
-    real_parts = point.new_zeros(point.shape[:-1] + (1,))
-    point_as_quaternion = torch.cat((real_parts, point), -1)
-    out = quaternion_raw_multiply(
-        quaternion_raw_multiply(quaternion, point_as_quaternion),
-        quaternion_invert(quaternion),
-    )
-    return out[..., 1:]
-
-
-def quaternion_invert(quaternion):
-    """
-    Source: https://github.com/facebookresearch/pytorch3d/blob/main/pytorch3d/transforms/rotation_conversions.py
-    Given a quaternion representing rotation, get the quaternion representing
-    its inverse.
-
-    Args:
-        quaternion: Quaternions as tensor of shape (..., 4), with real part
-            first, which must be versors (unit quaternions).
-
-    Returns:
-        The inverse, a tensor of quaternions of shape (..., 4).
-    """
-
-    return quaternion * quaternion.new_tensor([1, -1, -1, -1])

@@ -11,8 +11,8 @@ from models.components.linear import LinearLayers
 
 class ContactMapGenerator(nn.Module):
     def __init__(self, 
-        device,
-        cfgs
+        cfgs,
+        device
         ):
         super(ContactMapGenerator, self).__init__()
 
@@ -21,7 +21,7 @@ class ContactMapGenerator(nn.Module):
 
         self.clip_text_encoder = Clip(device=device)
         self.pointnet = PointNet(init_k=3, device=device)
-        self.contact_encoder = ContactEncoder(device)
+        self.contact_encoder = VAEEncoder(device)
         self.contact_decoder = LinearLayers(
             in_dim=1665, 
             layers_out_dim=[512, 256, 128, 1], 
@@ -62,7 +62,7 @@ class ContactMapGenerator(nn.Module):
         return centroids
     
     def forward(self, 
-        text, mesh, 
+        prompt, mesh, 
         inference,
         contact_map=None
         ):
@@ -77,7 +77,7 @@ class ContactMapGenerator(nn.Module):
         point_cloud_norm = point_cloud / object_scale.view(B, 1, 1)
         local_feature, global_feature = self.pointnet(point_cloud_norm)
 
-        text_feature = self.clip_text_encoder.extract_feature(text)
+        text_feature = self.clip_text_encoder.extract_feature(prompt)
 
         if not inference:
             sample_contact_map = contact_map[batch_point_cloud_idx, point_cloud_idx]
@@ -121,11 +121,11 @@ class ContactMapGenerator(nn.Module):
         
     
 
-class ContactEncoder(nn.Module):
+class VAEEncoder(nn.Module):
     def __init__(self, 
         device
         ):
-        super(ContactEncoder, self).__init__()
+        super(VAEEncoder, self).__init__()
 
         self.pointnet_structure = PointNet(init_k=4, local_feat=False, device=device)
 

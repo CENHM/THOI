@@ -21,6 +21,10 @@ $ pip install scikit-image
 $ pip install tensorboard
 $ pip install matplotlib
 $ pip install tqdm
+$ pip install smplx
+$ pip install PyWavefront
+$ pip install pymeshlab
+$ pip install open3d
 ```
 
 ## 1.1. CLIP dependencies
@@ -33,13 +37,13 @@ $ pip install git+https://github.com/openai/CLIP.git
 
 ## 1.2. MANO model and code
 
-We use [MANO](https://mano.is.tue.mpg.de/) model and some part of Taheri's [code](https://github.com/otaheri/MANO). Note that you should follow the licenses of each repository you download.
+We use [MANO](https://mano.is.tue.mpg.de/) model and MANO inplimentation in [smplx](https://github.com/vchoutas/smplx) package, along with some part of Taheri's [code](https://github.com/otaheri/MANO). Note that you should follow the licenses of each repository you download.
 
 - Download models (Models & Code) from the [MANO](https://mano.is.tue.mpg.de/) website.
 - Unzip and copy the MANO models folder `.../mano_v*/models` into `.../Text2HOI/models/components/mano`
-- Download Taheri's [code](https://github.com/otaheri/MANO), copy the `mano` folder into `.../Text2HOI/models/components/mano` 
 - Install additional dependencies.
   ```
+  $ pip install smplx
   $ pip install trimesh==4.5.2
   $ pip install chumpy==0.70
   $ pip install pyglet==1.5.22

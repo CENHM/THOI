@@ -39,7 +39,7 @@ def dm_loss(lhand_dist_map_diff, rhand_dist_map_diff):
     return torch.sum((lhand_dist_map_diff + rhand_dist_map_diff))
 
 
-def or_loss(
+def orient_loss(
     lhand_diff_pred, lhand_diff,
     rhand_diff_pred, rhand_diff,
     lhand_mask, rhand_mask
@@ -79,7 +79,7 @@ def penetrate_loss(
     return l2_norm(penet_dist_sum_lhand) + l2_norm(penet_dist_sum_rhand)
 
 
-def joint_loss(
+def contect_loss(
     point_cloud, 
     joint_lhand, mask_lhand,
     joint_rhand, mask_rhand,

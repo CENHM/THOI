@@ -3,8 +3,9 @@ import numpy as np
 import torch
 import os
 import datetime
-from matplotlib.collections import PolyCollection
-import matplotlib.pyplot as plt
+import torch.optim as optim
+# from matplotlib.collections import PolyCollection
+# import matplotlib.pyplot as plt
 
 from utils.arguments import CFGS
 
@@ -31,15 +32,19 @@ INITIALIZER = Initializer()
 
 class Logger:
     def __init__(self, cfgs):
-        self.testing = cfgs.testing
+        self.testing = cfgs.inferencing
         self.path = 'log.txt'
-        self.checkpoint_path = cfgs.checkpoint_path
+        self.checkpoint_dir = cfgs.checkpoint_dir
         self.result_path = cfgs.result_path
 
-        self.save_path = self.checkpoint_path if not self.testing else self.result_path
-        self.file_name = 'log.txt' if not self.testing else cfgs.checkpoint_path.replace('/', '-') + '.txt'
+        self.save_path = self.checkpoint_dir if not self.testing else self.result_path
+        self.file_name = 'log.txt' if not self.testing else cfgs.checkpoint_dir.replace('/', '-') + '.txt'
 
-        self.__CLEAR_LOG()
+        self.__INITIALIZE()
+
+    def __INITIALIZE(self):
+        with open(self.path, 'w+') as logf:
+            logf.write(f'\n********* {datetime.datetime.now()} *********\n\n')      
         
     def __CLEAR_LOG(self):
         with open(self.path, 'w+') as f:
@@ -49,7 +54,7 @@ class Logger:
         if not os.path.exists(self.save_path):
             os.makedirs(self.save_path)
         with open(self.path, 'r') as original:
-            with open(self.save_path + self.file_name, 'a') as copy:
+            with open(f'{self.save_path}/{self.file_name}', 'a') as copy:
                 copy.write(f'\n********* {datetime.datetime.now()} *********\n\n')
                 for line in original:
                     copy.write(line)        
@@ -60,67 +65,73 @@ class Logger:
             f.write(text + '\n')
 
 Log = Logger(CFGS)
-save_log = Log.SAVE_LOG()
+SAVE_LOG = Log.SAVE_LOG
 log = Log.WRITE
 
 
-def LOAD_CHECKPOINT(optimizer, model):
-    path = CFGS.checkpoint_path
+def LOAD_CHECKPOINT(optims, models):
+    log(f'Resume checkpoint from {CFGS.checkpoint_dir}')
 
-    checkpoint_path = path + '/checkpoint.tar'
-    checkpoint = torch.load(checkpoint_path)
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    model.load_state_dict(checkpoint['model_state_dict'])
-    start_epoch = checkpoint['epoch']
-    return start_epoch, optimizer, model
+    checkpoint_path = f'{CFGS.checkpoint_dir}/checkpoint.tar'
+    save_dict = torch.load(checkpoint_path)
+
+    start_epoch = save_dict['epoch']
+
+    for model_name, model in models.items():
+        model.load_state_dict(save_dict['models'][model_name])
+    for optim_name, optim in optims.items():  
+        optim.load_state_dict(save_dict['optims'][optim_name])  
+    
+    return start_epoch, optims, models
     
 
 def LOAD_WEIGHT(model):
-    path = CFGS.checkpoint_path
+    log(f'Load trained model from {CFGS.checkpoint_dir}')
 
-    checkpoint_path = path + '/checkpoint.tar'
+    checkpoint_path = f'{CFGS.checkpoint_dir}/checkpoint.tar'
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     return model
 
 
-def SAVE_CHECKPOINT(epoch, optimizer, model, path):
+def SAVE_CHECKPOINT(epoch, optims: dict, models: dict):
     save_dict = {
         'epoch': epoch,
-        'optimizer_state_dict': optimizer.state_dict(),
-        'model_state_dict': model.state_dict()
+        'models': {},
+        'optims': {},
     }
-    torch.save(save_dict, os.path.join(path, f'checkpoint.tar'))
+    for model_name, model in models.items():
+        save_dict['models'][model_name] = model.state_dict()
+    for optim_name, optim in optims.items():
+        save_dict['optims'][optim_name] = optim.state_dict()
+
+    torch.save(save_dict, f'{CFGS.checkpoint_dir}/checkpoint.tar')
 
 
-# # Start your code.
+def ADD_OPTIMIZERS(models: dict):
+    optims = {}
+    for model_name, model in models.items():
+        optims[f'optim_{model_name}'] = optim.Adam(
+            model.parameters(), lr=CFGS.learning_rate, weight_decay=CFGS.weight_decay)
+    return optims
 
-# def visualize_obj_file(path):
 
-#     # https://zhuanlan.zhihu.com/p/655737746
+def OPTIMIZER_STEP(optims: dict):
+    for optim_name, optim in optims.items():
+        optim.step()
+    return optims
 
 
-#     V, F = [], []
-#     with open(path) as f:
-#         for line in f.readlines():
-#             if line.startswith('#'):
-#                 continue
-#             values = line.split()
-#             if not values:
-#                 continue
-#             if values[0] == 'v':
-#                 V.append([float(x) for x in values[1:4]])
-#             elif values[0] == 'f':
-#                 F.append([int(x.split('/')[0]) for x in values[1:4]])
-#     V, F = np.array(V), np.array(F)-1
+def MODELS_SET_MODE(models: dict, train=True):
+    for model_name, model in models.items():
+        if train:
+            model.train()
+        else:
+            model.eval()
+    return models
 
-#     V = (V-(V.max(0)+V.min(0))/2)/max(V.max(0)-V.min(0))
 
-#     fig = plt.figure(figsize=(6,6))
-#     T = V[F][...,:2]
-#     ax = fig.add_axes([0,0,1,1], xlim=[-1,+1], ylim=[-1,+1],
-#                     aspect=1, frameon=False)
-#     collection = PolyCollection(T, closed=True, linewidth=0.1,
-#                                 facecolor="None", edgecolor="black")
-#     ax.add_collection(collection)
-#     plt.show()
+def MODELS_SET_ZERO_GRAD(models: dict):
+    for model_name, model in models.items():
+        model.zero_grad()
+    return models

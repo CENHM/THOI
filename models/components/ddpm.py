@@ -82,6 +82,7 @@ class DDPM(nn.Module):
         self, 
         lhand_motion, rhand_motion, obj_motion,         
         obj_feat, text_feat,
+        hand_motion_mask, frame_padding_mask,
         frame_len=None,
         timesteps=None,
         ):
@@ -109,7 +110,8 @@ class DDPM(nn.Module):
         pred_X0_lhand, pred_X0_rhand, pred_X0_obj = self.denoise_model(
             x_tilde_lhand, x_tilde_rhand, x_tilde_obj, 
             obj_feat, text_feat, 
-            timesteps
+            hand_motion_mask, frame_padding_mask,
+            timesteps,
         )
 
         return pred_X0_lhand, pred_X0_rhand, pred_X0_obj
@@ -119,6 +121,7 @@ class DDPM(nn.Module):
         self, 
         objs_feat, text_feat, 
         hand_motion_dim, obj_motion_dim,
+        hand_motion_mask, frame_padding_mask,
         frame_len
         ):
 
@@ -133,7 +136,8 @@ class DDPM(nn.Module):
 
         sample_lhand_motion, sample_rhand_motion, sample_obj_motion = self.ddpm_loop(
             lhand_motion, rhand_motion, obj_motion, 
-            objs_feat, text_feat
+            objs_feat, text_feat,
+            hand_motion_mask, frame_padding_mask,
         )
 
         return sample_lhand_motion, sample_rhand_motion, sample_obj_motion
@@ -142,6 +146,7 @@ class DDPM(nn.Module):
         self, 
         lhand_motion, rhand_motion, obj_motion, 
         obj_feat, text_feat,
+        hand_motion_mask, frame_padding_mask,
         ):
 
         for t in tqdm.tqdm(
@@ -157,7 +162,8 @@ class DDPM(nn.Module):
             pred_X0_lhand, pred_X0_rhand, pred_X0_obj = self.forward(
                 lhand_motion, rhand_motion, obj_motion, 
                 obj_feat, text_feat, 
-                timesteps=t)
+                hand_motion_mask, frame_padding_mask,
+                t)
             
             beta = self.params["betas"][t]
             alpha = self.params["alphas"][t]
