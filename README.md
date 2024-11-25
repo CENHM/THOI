@@ -62,7 +62,7 @@ THOI
 
 ## 1.3. GRAB dataset
 
-Follow the instructions to download [GRAB](https://github.com/otaheri/GRAB).
+Follow the [instructions](https://github.com/otaheri/GRAB) to download [GRAB](https://grab.is.tue.mpg.de/).
 
 # 2. Before running
 
