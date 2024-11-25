@@ -35,7 +35,7 @@ pip install git+https://github.com/openai/CLIP.git
 
 ## 1.2. MANO model and code
 
-We use [MANO](https://mano.is.tue.mpg.de/) model and MANO inplimentation in [smplx](https://github.com/vchoutas/smplx) package, along with some part of Taheri's [code](https://github.com/otaheri/MANO). Note that you should follow the licenses of each repository you download.
+We use [MANO](https://mano.is.tue.mpg.de/) model and MANO implimentation in [smplx](https://github.com/vchoutas/smplx) package. Note that you should follow the licenses of the dataset you download.
 
 - Download models (Models & Code) from the [MANO](https://mano.is.tue.mpg.de/) website.
 - Unzip and copy the MANO models folder `.../mano_v*/models` into `.../Text2HOI/models/components/mano`
