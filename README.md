@@ -21,7 +21,6 @@ pip install scikit-image
 pip install tensorboard
 pip install matplotlib
 pip install tqdm
-$ pip install PyWavefront
 pip install pymeshlab
 pip install open3d
 ```
