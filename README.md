@@ -33,9 +33,9 @@ pip install ftfy regex
 pip install git+https://github.com/openai/CLIP.git
 ```
 
-## 1.2. MANO model and code
+## 1.2. MANO
 
-We use [MANO](https://mano.is.tue.mpg.de/) model and MANO implimentation in [smplx](https://github.com/vchoutas/smplx) package. Note that you should follow the licenses of the dataset you download.
+We use [MANO](https://mano.is.tue.mpg.de/) model and MANO implimentation in [smplx](https://github.com/vchoutas/smplx) package. Note that you should follow the licenses of MANO.
 
 - Download models (Models & Code) from the [MANO](https://mano.is.tue.mpg.de/) website.
 - Unzip and copy the MANO models folder `.../mano_v*/models` into `.../Text2HOI/models/components/mano`
@@ -59,6 +59,10 @@ THOI
             |   |-- ...
             |-- utils.py
 ```
+
+## 1.3. GRAB dataset
+
+Follow the instructions to download [GRAB](https://github.com/otaheri/GRAB).
 
 # 2. Before running
 
