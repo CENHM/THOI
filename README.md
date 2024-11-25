@@ -93,7 +93,7 @@ There are a few things that need to be made before running the code. Please foll
   ```
 - After you accuire GRAB dataset and finish the extraction using the official script, run `.../datasets/preprocess_grab_object_mesh.py` to preprocess the GRAB dataset (to reduce the number of vertices).
 
-# 3.Run
+# 3. Run
 
 There are three ways to run the porject:
 
