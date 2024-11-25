@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from models.components.linear import LinearLayers
 from utils.arguments import CFGS
 
 
@@ -13,15 +14,18 @@ class TNet(nn.Module):
         self.conv1 = torch.nn.Conv1d(k, 64, 1)
         self.conv2 = torch.nn.Conv1d(64, 128, 1)
         self.conv3 = torch.nn.Conv1d(128, 1024, 1)
-        self.fc1 = nn.Linear(1024, 512)
-        self.fc2 = nn.Linear(512, 256)
         self.fc3 = nn.Linear(256, k * k)
 
         self.bn1 = nn.BatchNorm1d(64)
         self.bn2 = nn.BatchNorm1d(128)
         self.bn3 = nn.BatchNorm1d(1024)
-        self.bn4 = nn.BatchNorm1d(512)
-        self.bn5 = nn.BatchNorm1d(256)
+
+        self.mlp = LinearLayers(
+            in_dim=1024, 
+            layers_out_dim=[512, 256], 
+            activation_func='relu',
+            bn=True
+        )
 
         self.k = k
         self.device = device
@@ -35,8 +39,7 @@ class TNet(nn.Module):
         x = torch.max(x, 2, keepdim=True)[0]
         x = x.view(-1, 1024)
 
-        x = F.relu(self.bn4(self.fc1(x)))
-        x = F.relu(self.bn5(self.fc2(x)))
+        x = self.mlp(x)
         x = self.fc3(x)
 
         I = torch.eye(self.k).float().to(self.device)

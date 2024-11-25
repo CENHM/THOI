@@ -149,7 +149,6 @@ class TransformerModel(nn.Module):
 
         mask_lhand = hand_motion_mask["mask_lhand"]
         mask_rhand = hand_motion_mask["mask_rhand"]
-        frame_padding_mask = torch.where(~frame_padding_mask, 1.0, 0.0)
 
         x = torch.zeros((B, 2*L, self.dim, )).to(self.device)
         x[:, 0::2] = x_lhand
@@ -158,16 +157,19 @@ class TransformerModel(nn.Module):
         x = self.frame_wise_pos_encoder(x)
         x = self.agent_wise_pos_encoder(x)
 
-        x[:, 0::2] *= mask_lhand
-        x[:, 1::2] *= mask_rhand
-        x *= frame_padding_mask
-        
-        x = self.encoder(x, frame_padding_mask)
+        # mask input
+        x[:, 0::2] = x[:, 0::2] * mask_lhand * frame_padding_mask
+        x[:, 1::2] = x[:, 1::2] * mask_rhand * frame_padding_mask
+
+        key_mask = frame_padding_mask.repeat_interleave(2, dim=1).to(self.device)
+        key_mask = torch.where(key_mask!=0., False, True)
+
+        x = self.encoder(x, key_mask)
 
         x_out_lhand = self.fc_out_lhand(x[:, 0::2])
         x_out_rhand = self.fc_out_rhand(x[:, 1::2])
 
-        x_out_lhand *= mask_lhand * frame_padding_mask[:, 0::2]
-        x_out_rhand *= mask_rhand * frame_padding_mask[:, 1::2]
+        x_out_lhand = x_out_lhand * mask_lhand * frame_padding_mask
+        x_out_rhand = x_out_rhand * mask_rhand * frame_padding_mask
 
         return x_out_lhand, x_out_rhand

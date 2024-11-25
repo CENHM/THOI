@@ -5,8 +5,6 @@ from torch.nn import functional as F
 
 from models.components.clip import Clip
 from utils.rotation import rot6d_to_rotmat
-import pandas as pd
-import open3d
 
 
 def params_to_device(params, device):
@@ -169,6 +167,40 @@ def get_padding_mask(
     return frame_mask.unsqueeze(-1), frame_mask_seq.unsqueeze(-1), frame_mask_seq_cond.unsqueeze(-1)
 
 
+def get_frame_mask( 
+    batch_size, 
+    target_frame_len, 
+    frame_len, 
+    device,
+    ):
+    '''
+    :RETURN
+        [B, L, 1], [B, 2 * L, 1], [B, 3 * L + 1, 1]
+    '''
+
+    # Frame mask 
+    frame_mask = \
+        torch.arange(target_frame_len).expand(batch_size, target_frame_len).to(device) >= frame_len
+    
+    # frame_mask_seq_wo_obj = torch.full((batch_size, 2*target_frame_len), True).bool().to(device)
+    # frame_mask_seq_wo_obj[:, 0::2] = frame_mask
+    # frame_mask_seq_wo_obj[:, 1::2] = frame_mask
+
+    # frame_mask_seq_w_obj = torch.full((batch_size, 3*target_frame_len), True).bool().to(device)
+    # frame_mask_seq_w_obj[:, 0::3] = frame_mask
+    # frame_mask_seq_w_obj[:, 1::3] = frame_mask
+    # frame_mask_seq_w_obj[:, 2::3] = frame_mask
+    # frame_mask_seq_cond = torch.cat((torch.full((batch_size, 1), False).bool().to(device), frame_mask_seq_cond), dim=1)
+    
+    frame_mask = torch.where(~frame_mask, 1.0, 0.0)
+    # frame_mask_seq_wo_obj = torch.where(~frame_mask_seq_wo_obj, 1.0, 0.0)
+    # frame_mask_seq_w_obj = torch.where(~frame_mask_seq_w_obj, 1.0, 0.0)
+
+
+    return frame_mask.unsqueeze(-1)
+
+
+
 def get_joint_obj_dist_map(hand_joints, point_cloud):
     return torch.cdist(hand_joints, point_cloud)
 
@@ -196,20 +228,22 @@ def get_deformed_obj_point_cloud(obj_motion, point_cloud):
 def estimated_distance_maps(
     deformed_obj_point_cloud_pred,
     deformed_obj_point_cloud,
-    pred_joint, gt_joint,
-    hand_mask, frame_mask,
+    pred_joint, true_joint,
+    hand_mask, 
+    true_frame_mask, pred_frame_mask,
     tau
     ):
 
     pred_dist_map = get_joint_obj_dist_map(pred_joint, deformed_obj_point_cloud_pred)
-    dist_map = get_joint_obj_dist_map(gt_joint, deformed_obj_point_cloud)
-
-    threadhold = (dist_map < tau)
+    true_dist_map = get_joint_obj_dist_map(true_joint, deformed_obj_point_cloud)
+    threadhold = (true_dist_map < tau)
 
     hand_mask = hand_mask.unsqueeze(-1)
-    frame_mask = frame_mask.unsqueeze(-1)
 
-    dist_map_diff = torch.pow((pred_dist_map - dist_map) * threadhold, 2) * hand_mask * frame_mask 
+    pred_dist_map = pred_dist_map * pred_frame_mask.unsqueeze(-1)
+    true_dist_map = true_dist_map * pred_frame_mask.unsqueeze(-1)
+
+    dist_map_diff = torch.pow((pred_dist_map - true_dist_map) * threadhold, 2) * hand_mask
     return dist_map_diff
 
 

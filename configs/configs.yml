@@ -1,10 +1,8 @@
-inferencing: FALSE
-
 dataset: GRAB
 dataset_dir: E:/Datasets/HOI/GRAB/GRAB-dataset-extract
 
 mano_model_path: ./models/components/mano/models
 
-epoch: 64
+epoch: 5
 batch_size: 4
 learning_rate: 0.001

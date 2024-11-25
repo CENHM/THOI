@@ -47,9 +47,6 @@ class MotionGenerator(nn.Module):
         motion_lhand=None, motion_rhand=None, motion_obj=None
         ):
 
-        B = motion_lhand.shape[0]
-        
-
         if not inference:
             return self.diffusion_model(
                 motion_lhand, motion_rhand, motion_obj, 
@@ -115,8 +112,6 @@ class TransformerModel(nn.Module):
         mask_lhand = hand_motion_mask["mask_lhand"]
         mask_rhand = hand_motion_mask["mask_rhand"]
 
-        frame_padding_mask = torch.where(~frame_padding_mask, 1.0, 0.0)
-
         B, L = lhand_motion.shape[:2]
 
         obj_feat = obj_feat.unsqueeze(dim=1)
@@ -141,19 +136,25 @@ class TransformerModel(nn.Module):
         x = self.agent_wise_pos_encoder(x)
 
         # mask input
-        x[:, 1::3] *= mask_lhand
-        x[:, 2::3] *= mask_rhand
-        x *= frame_padding_mask
+        x[:, 1::3] = x[:, 1::3] * mask_lhand * frame_padding_mask
+        x[:, 2::3] = x[:, 2::3] * mask_rhand * frame_padding_mask
+        x[:, 3::3] = x[:, 3::3] * frame_padding_mask
 
-        x = self.encoder(x, frame_padding_mask)
+        key_mask = frame_padding_mask.repeat_interleave(3, dim=1).to(self.device)
+        key_mask = torch.cat([
+            torch.full((B, 1, 1), 1.).to(self.device),
+            key_mask], dim=1)
+        key_mask = torch.where(key_mask!=0., False, True)
+
+        x = self.encoder(x, key_mask)
         
         x_out_lhand = self.lhand_out_emb(x[:, 1::3])
         x_out_rhand = self.rhand_out_emb(x[:, 2::3])
         x_out_obj = self.obj_out_emb(x[:, 3::3])
         
         # mask input
-        x_out_lhand = x_out_lhand * mask_lhand * frame_padding_mask[:, 1::3]
-        x_out_rhand = x_out_rhand * mask_rhand * frame_padding_mask[:, 2::3]
-        x_out_obj *= frame_padding_mask[:, 3::3]
+        x_out_lhand = x_out_lhand * mask_lhand * frame_padding_mask
+        x_out_rhand = x_out_rhand * mask_rhand * frame_padding_mask
+        x_out_obj = x_out_obj * frame_padding_mask
 
         return x_out_lhand, x_out_rhand, x_out_obj

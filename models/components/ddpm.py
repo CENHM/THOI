@@ -103,9 +103,9 @@ class DDPM(nn.Module):
         else:
             timesteps = torch.Tensor(
                 [timesteps for _ in range(B)]).to(self.device).long()
-            x_tilde_lhand = lhand_motion[:, :frame_len, :]
-            x_tilde_rhand = rhand_motion[:, :frame_len, :]
-            x_tilde_obj = obj_motion[:, :frame_len, :]
+            x_tilde_lhand = lhand_motion
+            x_tilde_rhand = rhand_motion
+            x_tilde_obj = obj_motion
 
         pred_X0_lhand, pred_X0_rhand, pred_X0_obj = self.denoise_model(
             x_tilde_lhand, x_tilde_rhand, x_tilde_obj, 
@@ -120,8 +120,8 @@ class DDPM(nn.Module):
     def sampling(
         self, 
         objs_feat, text_feat, 
-        hand_motion_dim, obj_motion_dim,
         hand_motion_mask, frame_padding_mask,
+        hand_motion_dim, obj_motion_dim,
         frame_len
         ):
 
@@ -168,15 +168,15 @@ class DDPM(nn.Module):
             beta = self.params["betas"][t]
             alpha = self.params["alphas"][t]
             alpha_bar = self.params["alpha_bars"][t]
-            alpha_prev_bar = self.params["alpha_prev_bars"][t]
+            alpha_prev_bar = self.params["alpha_bars_prev"][t]
             log_variance = self.params["posterior_log_variance_clip"][t]
 
             coef_X0 = (beta * torch.sqrt(alpha_prev_bar) / (1 - alpha_bar))
             coef_noise = ((1 - alpha_prev_bar) * torch.sqrt(alpha) / (1 - alpha_bar))
 
-            mu_xt_lhand = pred_X0_lhand * coef_X0 + sample_lhand * coef_noise
-            mu_xt_rhand = pred_X0_rhand * coef_X0 + sample_rhand * coef_noise
-            mu_xt_obj = pred_X0_obj * coef_X0 + sample_obj * coef_noise
+            mu_xt_lhand = pred_X0_lhand * coef_X0 + lhand_motion * coef_noise
+            mu_xt_rhand = pred_X0_rhand * coef_X0 + rhand_motion * coef_noise
+            mu_xt_obj = pred_X0_obj * coef_X0 + obj_motion * coef_noise
             
             sample_lhand = mu_xt_lhand + torch.exp(0.5 * log_variance) * noise_lhand_motion
             sample_rhand = mu_xt_rhand + torch.exp(0.5 * log_variance) * noise_rhand_motion

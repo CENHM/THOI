@@ -73,7 +73,7 @@ def LOAD_CHECKPOINT(optims, models):
     log(f'Resume checkpoint from {CFGS.checkpoint_dir}')
 
     checkpoint_path = f'{CFGS.checkpoint_dir}/checkpoint.tar'
-    save_dict = torch.load(checkpoint_path)
+    save_dict = torch.load(checkpoint_path, weights_only=True)
 
     start_epoch = save_dict['epoch']
 
@@ -85,13 +85,15 @@ def LOAD_CHECKPOINT(optims, models):
     return start_epoch, optims, models
     
 
-def LOAD_WEIGHT(model):
+def LOAD_WEIGHT(models: dict):
     log(f'Load trained model from {CFGS.checkpoint_dir}')
 
     checkpoint_path = f'{CFGS.checkpoint_dir}/checkpoint.tar'
-    checkpoint = torch.load(checkpoint_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    return model
+    save_dict = torch.load(checkpoint_path, weights_only=True)
+
+    for model_name, model in models.items():
+        model.load_state_dict(save_dict['models'][model_name])
+    return models
 
 
 def SAVE_CHECKPOINT(epoch, optims: dict, models: dict):

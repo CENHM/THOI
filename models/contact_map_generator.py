@@ -77,7 +77,7 @@ class ContactMapGenerator(nn.Module):
         point_cloud_norm = point_cloud / object_scale.view(B, 1, 1)
         local_feature, global_feature = self.pointnet(point_cloud_norm)
 
-        text_feature = self.clip_text_encoder.extract_feature(prompt)
+        text_feature = self.clip_text_encoder.extract_feature(prompt).float()
 
         if not inference:
             sample_contact_map = contact_map[batch_point_cloud_idx, point_cloud_idx]
@@ -85,11 +85,6 @@ class ContactMapGenerator(nn.Module):
             contact_vec, mu, log_var = self.contact_encoder(point_cloud_norm_contact)
         else:
             contact_vec = torch.randn(B, 64).to(self.device)
-
-        object_scale = object_scale.float()
-        global_feature = global_feature.float()
-        text_feature = text_feature.float()
-        contact_vec = contact_vec.float()
 
         object_scale_reshape = object_scale.reshape(B, 1, 1).repeat(1, self.npoints, 1)
         global_feature_reshape = global_feature.unsqueeze(1).repeat(1, self.npoints, 1)

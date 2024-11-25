@@ -2,7 +2,6 @@ import smplx
 import torch
 from torch.nn import functional as F
 
-from models.components.linear import LinearLayers
 from utils.rotation import rot6d_to_rotvec
 from utils.utils import reshape_mesh_form
 
