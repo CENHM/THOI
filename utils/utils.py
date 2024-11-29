@@ -26,10 +26,10 @@ def get_hand_motion_mask(text_feat, device):
     '''
     clip_text_encoder = Clip(device=device)
     cos_similarity_cal = nn.CosineSimilarity(dim=2, eps=1e-6)
-    prompts = ["right hand", "left hand", "both hands"]
+    prompts = ["the right hand.", "the left hand.", "both hands."]
     prompts = ["A photo of " + prompt for prompt in prompts]
 
-    prompt_features = clip_text_encoder.extract_feature(prompts)
+    prompt_features = clip_text_encoder.extract_feature(prompts).unsqueeze(0).repeat(4, 1, 1)
     text_feat_expanded = text_feat.unsqueeze(dim=1).expand(-1, 3, -1)
     cos_similarities = cos_similarity_cal(text_feat_expanded, prompt_features)
     h_star_idx = cos_similarities.argmax(dim=1)
@@ -234,6 +234,8 @@ def estimated_distance_maps(
     tau
     ):
 
+    norm = deformed_obj_point_cloud_pred.shape[-3] * deformed_obj_point_cloud_pred.shape[-2] * pred_joint.shape[-2]
+
     pred_dist_map = get_joint_obj_dist_map(pred_joint, deformed_obj_point_cloud_pred)
     true_dist_map = get_joint_obj_dist_map(true_joint, deformed_obj_point_cloud)
     threadhold = (true_dist_map < tau)
@@ -244,7 +246,8 @@ def estimated_distance_maps(
     true_dist_map = true_dist_map * pred_frame_mask.unsqueeze(-1)
 
     dist_map_diff = torch.pow((pred_dist_map - true_dist_map) * threadhold, 2) * hand_mask
-    return dist_map_diff
+
+    return dist_map_diff / norm
 
 
 def relative_3d_orientation_diff(

@@ -21,7 +21,7 @@ class Configs:
         # If config file directory is provided, then load config from file.
         parser.add_argument('-cf', '--config_dir', 
                             type=str, 
-                            default=None, 
+                            default='configs/configs.yml', 
                             help='If config file directory is provided, then load config from file.')
 
         # global setting

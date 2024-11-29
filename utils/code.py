@@ -16,7 +16,7 @@ class Initializer:
         self.__SET_SEED()
         self.__VISUALIZE_TENSOR_SHAPE()
     
-    def __SET_SEED(self, seed=1024):
+    def __SET_SEED(self, seed=1025):
         random.seed(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)

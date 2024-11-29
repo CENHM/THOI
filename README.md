@@ -62,7 +62,15 @@ THOI
 
 ## 1.3. GRAB dataset
 
-Follow the [instructions](https://github.com/otaheri/GRAB) to download [GRAB](https://grab.is.tue.mpg.de/).
+Install and follow the [instructions](https://github.com/otaheri/GRAB) to download [GRAB](https://grab.is.tue.mpg.de/). 
+
+For the text prompt annotation, we use visualize code to identify which hand is interacting with the object, and mannually annotate these frames with sentences to represent these motions. The annotation procedure follow protocols below:
+- Selected no more than 150 continuous frames from the sequence that ends a few frames after the interaction ends
+- If available, select a sequence of consecutive frames using the right hand, left hand, and both hands
+After you download the GRAB dataset and unzip files, copy the prompt annotation folder in [here](./asserts/annotation/) to `../GRAB/GRAB-dataset/tools`.
+
+(*optional*) If you want to create your own annotation, you can copy our modify visualization [code](./asserts/visualization.py) to where you install the GRAB [repo](https://github.com/otaheri/GRAB) and use it.
+
 
 # 2. Before running
 

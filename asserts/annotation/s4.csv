@@ -1,0 +1,13 @@
+﻿file_name,start_frame,end_frame,prompt
+cubelarge_inspect_1,436,585,Inspect a large cube with the right hand.
+cubelarge_lift,144,208,Lift a large cube with the right hand.
+cubelarge_lift,672,760,Lift a large cube with the left hand.
+cubelarge_lift,1048,1132,Lift a large cube with both hands.
+cubelarge_pass_1,240,344,Pass a large cube with the left hand.
+cubemedium_inspect_1,236,336,Inspect a medium cube with the right hand.
+cubemedium_inspect_1,400,550,Inspect a medium cube with both hands.
+cubemedium_lift,292,352,Lift a medium cube with the right hand.
+cubemedium_lift,780,844,Lift a medium cube with the left hand.
+cubemedium_lift,1084,1172,Lift a medium cube with both hands.
+cubemedium_pass_1,204,280,Pass a medium cube with the right hand.
+cubesmall_pass_1,180,276,Pass a small cube with the right hand.

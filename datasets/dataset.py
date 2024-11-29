@@ -27,21 +27,50 @@ class Dataset(data.Dataset):
 
         if dname == "GRAB":
             self.BASE_DIR = dir
-            self.ANNOTATION_DIR = f"{dir}/tools/frame_prompt_annotation"
+            self.ANNOTATION_DIR = f"{dir}/tools/annotation"
             self.PARAMS_DIR = f"{dir}/grab"
             self.OBJ_MESH_DIR = f"{dir}/tools/object_meshes/contact_meshes_preprocess"
             self.HAND_MESH_DIR = f"{dir}/tools/subject_meshes"
 
-            self.len = len(read_csv_file(f"{self.ANNOTATION_DIR}/annotation_train.csv").index)
+            if train:
+                self.subjects = [
+                    's1',
+                    's2',
+                    's3',
+                ]
+            else:
+                self.subjects = [
+                    's4',
+                ]
+            self.len, self.lens = self.__get_dataset_len()
 
+            self.lens = np.cumsum(np.array(self.lens))
+
+            # self.len = len(read_csv_file(f"{self.ANNOTATION_DIR}/annotation_train.csv").index)
+
+
+    def __get_dataset_len(self):
+        tot_len = 0
+        lens = [0]
+        for subject in self.subjects:
+            curr_len = len(read_csv_file(f"{self.ANNOTATION_DIR}/{subject}.csv").index)
+            tot_len += curr_len
+            lens.append(curr_len)
+        return tot_len, lens
+    
+    def __get_curr_file_idx(self, idx):
+        return np.max(np.where(self.lens <= idx)[0])
 
     def getitem_from_grab(self, idx):
+        curr_file_idx = self.__get_curr_file_idx(idx)
+        subject = f's{curr_file_idx + 1}'
+        idx -= self.lens[curr_file_idx]
         if self.train:
-            [subject, file_name, start_frame, end_frame, prompt] = read_csv_file(
-                f"{self.ANNOTATION_DIR}/annotation_train.csv", loc=idx)
+            [file_name, start_frame, end_frame, prompt] = read_csv_file(
+                f"{self.ANNOTATION_DIR}/{subject}.csv", loc=idx)
         else:
-            [subject, file_name, start_frame, end_frame, prompt] = read_csv_file(
-                f"{self.ANNOTATION_DIR}/annotation_train.csv", loc=idx)
+            [file_name, start_frame, end_frame, prompt] = read_csv_file(
+                f"{self.ANNOTATION_DIR}/{subject}.csv", loc=idx)
             
         load_data = read_npz_file(f"{self.PARAMS_DIR}/{subject}/{file_name}.npz")
 
