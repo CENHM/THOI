@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import DataLoader
 
 import tqdm
+import trimesh
 
 from models.contact_map_generator import ContactMapGenerator
 from models.frame_len_predictor import FrameLenPredictor
@@ -19,7 +20,9 @@ from utils.loss import (
     orient_loss, 
     penetrate_loss, 
     refine_loss)
+from utils.metrics import FrechetDistance
 from utils.utils import (
+    Mesh,
     clone_detach_dict_tensor, 
     estimated_distance_maps, 
     get_deformed_obj_point_cloud,
@@ -31,7 +34,8 @@ from utils.utils import (
 
 from utils.arguments import CFGS
 from utils.code import (
-    ADD_OPTIMIZERS, 
+    ADD_OPTIMIZERS,
+    EXAM_GRAD, 
     INITIALIZER, 
     MODELS_SET_MODE, 
     MODELS_SET_ZERO_GRAD, 
@@ -129,6 +133,17 @@ def tests():
                 hand_motion_mask["mask_rhand"],
                 pred_frame_mask,
                 CFGS.max_frame, B, DEVICE)
+            
+            
+            meshl = Mesh(vert=ref_mano_lhand['hand_verts'][2, 0, :].cpu().numpy(), 
+                         face=ref_mano_lhand['hand_faces'].cpu().numpy())
+            meshr = Mesh(vert=ref_mano_rhand['hand_verts'][2, 0, :].cpu().numpy(), 
+                         face=ref_mano_rhand['hand_faces'].cpu().numpy())
+            scene = trimesh.Scene([meshl, meshr])
+
+            scene.show()
+            
+            pass
 
     SAVE_LOG()
         
@@ -350,6 +365,8 @@ def train_one_epoch(epoch):
         loss_hand_refiner.backward()
 
         OPTIMIZERS = OPTIMIZER_STEP(OPTIMIZERS)
+
+        EXAM_GRAD(MODELS['frame_len_predictor'])
 
         if batch_idx % 1 == 0:
             log(f"TRAIN - epoch: {epoch} - batch: {batch_idx + 1} / {loader_len} - " + 

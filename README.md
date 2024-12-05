@@ -71,6 +71,12 @@ After you download the GRAB dataset and unzip files, copy the prompt annotation 
 
 (*optional*) If you want to create your own annotation, you can copy our modify visualization [code](./asserts/visualization.py) to where you install the GRAB [repo](https://github.com/otaheri/GRAB) and use it.
 
+## 1.4. other dependencies
+
+Install additional dependencies as a Python package.
+```bash
+pip install git+https://github.com/steveli/pytorch-sqrtm.git
+```
 
 # 2. Before running
 

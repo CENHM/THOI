@@ -37,10 +37,16 @@ class Dataset(data.Dataset):
                     's1',
                     's2',
                     's3',
+                    's4',
+                    's5',
+                    's6',
+                    's7',
+                    's8',
+                    's9',
                 ]
             else:
                 self.subjects = [
-                    's4',
+                    's10',
                 ]
             self.len, self.lens = self.__get_dataset_len()
 

@@ -1,10 +1,124 @@
 import numpy as np
+import scipy.linalg
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+from torch.autograd import Function
+import trimesh
 
 from models.components.clip import Clip
 from utils.rotation import rot6d_to_rotmat
+
+
+class Mesh(trimesh.Trimesh):
+    def __init__(self,
+                 file=None,
+                 vert=None,
+                 face=None,
+                 vc=None,
+                 fc=None,
+                 scale=None,
+                 **kwargs):
+        
+        if file is not None:
+            mesh = trimesh.load(file)
+            vert = mesh.vertices
+            face = mesh.faces
+
+        if scale is not None:
+            vert = vert * scale
+
+        super(Mesh, self).__init__(vertices=vert, faces=face)
+
+        if vc is not None and 'valpha' in kwargs:
+            vc = self.__set_color(vc, comp='v', alpha=kwargs['valpha'])
+        elif vc is not None:
+            vc = self.__set_color(vc, comp='v')
+
+        if fc is not None and 'falpha' in kwargs:
+            fc = self.__set_color(fc, comp='f', alpha=kwargs['falpha'])
+        elif fc is not None:
+            fc = self.__set_color(fc, comp='f')
+            
+
+    def __set_color(self, c, comp, alpha=None):
+        colors = {
+            'pink': [1.00, 0.75, 0.80],
+            'purple': [0.63, 0.13, 0.94],
+            'red': [1.0, 0.0, 0.0],
+            'green': [0., 1., 0.],
+            'yellow': [1., 1., 0],
+            'brown': [1.00, 0.25, 0.25],
+            'blue': [0., 0., 1.],
+            'white': [1., 1., 1.],
+            'orange': [1.00, 0.65, 0.00],
+            'grey': [0.75, 0.75, 0.75],
+            'black': [0., 0., 0.],
+        }
+        if alpha is not None:
+            assert 0. <= alpha['valpha'] <= 1., "\'alpha\' should be a float value greater than 0 and less than 1"
+            color = colors[c].append(alpha)
+        color = colors[c]
+
+        if comp == 'v':
+            self.set_verts_color(color)
+        elif comp == 'f':
+            self.set_faces_color(color)
+
+
+    def colors_like(self, color, array, ids):
+        color = np.array(self.__colors[color]).astype(np.int8)
+        color = color * 255
+        new_color = np.array(array)
+        new_color[ids, :color.shape[0]] = np.repeat(color[np.newaxis], ids.shape[0], axis=0)
+        return new_color
+
+    def set_verts_color(self, vc, idxs=None):
+        idxs = idxs if idxs is not None else np.arange(self.vertices.shape[0])
+        new_vc = self.colors_like(vc, self.visual.vertex_colors, idxs)
+        self.visual.vertex_colors[:] = new_vc
+
+    def set_faces_color(self, fc, idxs = None):
+        idxs = idxs if idxs is not None else np.arange(self.faces.shape[0])
+        new_fc = self.colors_like(fc, self.visual.face_colors, idxs)
+        self.visual.face_colors[:] = new_fc
+
+    @staticmethod
+    def concatenate_meshes(meshes):
+        return trimesh.util.concatenate(meshes)
+    
+
+class MatrixSquareRoot(Function):
+    """Square root of a positive definite matrix.
+
+    NOTE: matrix square root is not differentiable for matrices with
+          zero eigenvalues.
+    """
+    @staticmethod
+    def forward(ctx, input):
+        m = input.detach().cpu().numpy().astype(np.float64)
+        sqrtm = torch.from_numpy(scipy.linalg.sqrtm(m).real).to(input)
+        ctx.save_for_backward(sqrtm)
+        return sqrtm
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_input = None
+        if ctx.needs_input_grad[0]:
+            sqrtm, = ctx.saved_tensors
+            sqrtm = sqrtm.data.cpu().numpy().astype(np.float64)
+            gm = grad_output.data.cpu().numpy().astype(np.float64)
+
+            # Given a positive semi-definite matrix X,
+            # since X = X^{1/2}X^{1/2}, we can compute the gradient of the
+            # matrix square root dX^{1/2} by solving the Sylvester equation:
+            # dX = (d(X^{1/2})X^{1/2} + X^{1/2}(dX^{1/2}).
+            grad_sqrtm = scipy.linalg.solve_sylvester(sqrtm, sqrtm, gm)
+
+            grad_input = torch.from_numpy(grad_sqrtm).to(grad_output)
+        return grad_input
+
+sqrtm = MatrixSquareRoot.apply
 
 
 def params_to_device(params, device):
@@ -441,6 +555,8 @@ def get_close_joint_dist(
 
 def clone_detach_dict_tensor(d: dict):
     return {k: v.clone().detach() for k, v in d.items()}
+
+
 
 
 

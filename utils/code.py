@@ -4,6 +4,7 @@ import torch
 import os
 import datetime
 import torch.optim as optim
+import torch.nn as nn
 # from matplotlib.collections import PolyCollection
 # import matplotlib.pyplot as plt
 
@@ -134,6 +135,19 @@ def MODELS_SET_MODE(models: dict, train=True):
 
 
 def MODELS_SET_ZERO_GRAD(models: dict):
+    """ Set models to zero gradient during training procedure.
+    Params:
+        - models: dict(nn.Module)
+    Return:
+        - models: dict(nn.Module)
+    """
     for model_name, model in models.items():
         model.zero_grad()
     return models
+
+
+def EXAM_GRAD(model: nn.Module):
+    for name, parms in model.named_parameters():	
+        print('-->name:', name)
+        print('-->grad_requirs:',parms.requires_grad)
+        print('-->grad_value:', parms.grad)
