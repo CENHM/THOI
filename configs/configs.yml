@@ -5,4 +5,4 @@ mano_model_path: ./models/components/mano/models
 
 epoch: 100
 batch_size: 4
-learning_rate: 0.0001
+learning_rate: 0.01

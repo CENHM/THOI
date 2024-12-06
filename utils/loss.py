@@ -12,10 +12,17 @@ def l2_loss(pred, gt):
     l2_loss_cal = nn.MSELoss()
     return l2_loss_cal(pred, gt)
 
+def smooth_l1_loss(pred, true):
+    return F.smooth_l1_loss(pred, true)
 
 def binary_cross_entropy_loss(pred, gt):
     return F.binary_cross_entropy_with_logits(pred, gt)
 
+class Loss:
+    def __init__(self) -> None:
+        self.smooth_l1_loss = F.smooth_l1_loss
+
+criterion = Loss()
 
 def dice_loss(pred, gt):
     """

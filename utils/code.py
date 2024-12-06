@@ -114,7 +114,7 @@ def SAVE_CHECKPOINT(epoch, optims: dict, models: dict):
 def ADD_OPTIMIZERS(models: dict):
     optims = {}
     for model_name, model in models.items():
-        optims[f'optim_{model_name}'] = optim.Adam(
+        optims[f'optim_{model_name}'] = optim.AdamW(
             model.parameters(), lr=CFGS.learning_rate, weight_decay=CFGS.weight_decay)
     return optims
 
